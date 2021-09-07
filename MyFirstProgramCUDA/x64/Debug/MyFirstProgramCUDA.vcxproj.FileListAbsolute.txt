@@ -1,0 +1,2 @@
+C:\Users\Michael Muller\source\repos\MyFirstProgramCUDA\x64\Debug\MyFirstProgramCUDA.exe
+C:\Users\Michael Muller\source\repos\MyFirstProgramCUDA\x64\Debug\MyFirstProgramCUDA.pdb

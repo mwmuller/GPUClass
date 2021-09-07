@@ -1,0 +1,10 @@
+﻿  Compiling CUDA source file kernel.cu...
+  
+  C:\Users\Michael Muller\source\repos\MyFirstProgramCUDA>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.4\bin\nvcc.exe" -gencode=arch=compute_52,code=\"sm_52,compute_52\" --use-local-env -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\bin\HostX86\x64" -x cu   -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.4\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.4\include"  -G   --keep-dir x64\Debug  -maxrregcount=0  --machine 64 --compile -cudart static  -g  -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /Fdx64\Debug\vc142.pdb /FS /Zi /RTC1 /MDd " -o x64\Debug\kernel.cu.obj "C:\Users\Michael Muller\source\repos\MyFirstProgramCUDA\kernel.cu" 
+c:\users\michael muller\source\repos\myfirstprogramcuda\kernel.cu(90): error : argument of type "int *" is incompatible with parameter of type "int (*)[9]"
+  
+c:\users\michael muller\source\repos\myfirstprogramcuda\kernel.cu(67): warning : variable "cudaStatus" was declared but never referenced
+  
+  1 error detected in the compilation of "c:/users/michael muller/source/repos/myfirstprogramcuda/kernel.cu".
+  kernel.cu
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Microsoft\VC\v160\BuildCustomizations\CUDA 11.4.targets(785,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.4\bin\nvcc.exe" -gencode=arch=compute_52,code=\"sm_52,compute_52\" --use-local-env -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\bin\HostX86\x64" -x cu   -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.4\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.4\include"  -G   --keep-dir x64\Debug  -maxrregcount=0  --machine 64 --compile -cudart static  -g  -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /Fdx64\Debug\vc142.pdb /FS /Zi /RTC1 /MDd " -o x64\Debug\kernel.cu.obj "C:\Users\Michael Muller\source\repos\MyFirstProgramCUDA\kernel.cu"" exited with code 1.
