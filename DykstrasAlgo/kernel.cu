@@ -4,7 +4,7 @@
 
 #include <stdio.h>
 
-#define threadSIZE  1024 // max thread count per cuda
+#define threadSIZE  1024  // max thread count per cuda
 #define blockSize   16 // max number of blocks
 #define arrScale 75 // amount of times to multiple threads
 #define arrSize  (threadSIZE * arrScale)
@@ -87,7 +87,7 @@ int main()
     }
 
     // filling array with numbers
-    fillArrs <<<1, threadSIZE>>>(dev_a, dev_b);
+    fillArrs <<<arrSize, threadSIZE>>>(dev_a, dev_b);
 
     cudaStatus = cudaMemcpy(a, dev_a, arrSize * sizeof(int), cudaMemcpyDeviceToHost);
     cudaStatus = cudaMemcpy(b, dev_b, arrSize * sizeof(int), cudaMemcpyDeviceToHost);
@@ -113,6 +113,7 @@ int main()
     
     printf("Array C {");
     printArr<<<1, 1>>>(dev_c);
+	cudaDeviceSynchronize();
     printf("} \n");
     
 

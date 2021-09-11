@@ -1,0 +1,7 @@
+Latency Cores (CPU)
+throughput cores (GPU) - Maximise the amount of throuhgput (Effecient)
+
+CPU uArch - Sequential, data forwarding, branch prediction to reuce branach latency, Larger caches
+
+
+GPU uArch - Parallel

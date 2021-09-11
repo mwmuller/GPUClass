@@ -1,17 +1,15 @@
-x64\debug\kernel.cu.obj
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\myfirstprogramcuda.exe
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\myfirstprogramcuda.ilk
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\myfirstprogramcuda.pdb
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\myfirstprogramcuda.lib
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\myfirstprogramcuda.exp
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\file.cu.cache
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\kernel.cu.cache
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\file.cu.obj
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\kernel.cu.obj
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\vc142.pdb
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\cudacompile.read.1u.tlog
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\cudacompile.write.1u.tlog
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\link.command.1.tlog
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\link.read.1.tlog
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\link.write.1.tlog
-c:\users\michael muller\source\repos\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\myfirstprogramcuda.write.1u.tlog
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstprogramcuda.exe
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstprogramcuda.ilk
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstprogramcuda.pdb
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstprogramcuda.lib
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstprogramcuda.exp
+e:\gpuclass\myfirstprogramcuda\x64\debug\kernel.cu.cache
+e:\gpuclass\myfirstprogramcuda\x64\debug\kernel.cu.obj
+e:\gpuclass\myfirstprogramcuda\x64\debug\vc141.pdb
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\cudacompile.read.1u.tlog
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\cudacompile.write.1u.tlog
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\link.command.1.tlog
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\link.delete.1.tlog
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\link.read.1.tlog
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\link.write.1.tlog
+e:\gpuclass\myfirstprogramcuda\x64\debug\myfirstp.dae57a10.tlog\myfirstprogramcuda.write.1u.tlog
