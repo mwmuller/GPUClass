@@ -5,3 +5,24 @@ CPU uArch - Sequential, data forwarding, branch prediction to reuce branach late
 
 
 GPU uArch - Parallel
+
+Libraries:
+	- easy to use, without in depth PL knowledge
+	- Drop in
+	- quality
+	
+	
+GPU - global memory is part of the DRAM (VRAM) (Each block has a certain number of threads. Each grid contains blocks. )
+
+(MUST BE DONE EACH TIME)
+mkdir build --> create a makeDir build		
+cmake .. -> calls the cmake
+make -> builds
+
+./build.VetorAdd -i "Path to input0.raw","path to input1.raw" -o output.raw -e "path to output.raw"
+
+wbimport( used to import data from a file)
+
+__WB_H__ -> will need to recompile it (wb.h)
+
+#define JSON_OUTPUT

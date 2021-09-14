@@ -28,13 +28,14 @@ void minDistance(int dist[], bool sptSet[], int* &min_index)
 __global__ void print2dArr(my_arr *arr)
 {
 	int i = blockIdx.x*blockDim.x + threadIdx.x;
+	printf("we are here");
 		for (int x = 0; x < V; x++)
 		{
 			printf("%d", arr[i][x]);
 			if (x + 1 % V == 0) printf("\n");
 		}
 }
-__global__ void calcShortest(my_arr *graph, int* dist, bool* sptSet, int minIndex)
+__global__ void calcShortest(my_arr *graph, int* dist, int* sptSet, int minIndex)
 {
 	// We need to have each thread check a different dist location. If they all check the name location, then
 	// We will have the highest thread < V update the value in dist arr
@@ -43,7 +44,7 @@ __global__ void calcShortest(my_arr *graph, int* dist, bool* sptSet, int minInde
 	{
 		if (!sptSet[thread] && graph[minIndex][thread] && dist[minIndex] != INT_MAX
 			&& ((dist[minIndex] + graph[minIndex][thread]) < dist[thread]))
-			dist[thread] = dist[minIndex] + graph[minIndex][thread];
+			dist[thread] = dist[thread] + graph[minIndex][thread];
 	}
 }
 
@@ -59,6 +60,7 @@ __global__ void printSolution(int* dist)
 // for a graph represented using adjacency matrix representation
 int* dijkstra(my_arr *graph, int src)
 {
+	cudaError_t cudaError;
 	size_t dSize = V * V * sizeof(int);
     // init an array of ptrs to more arrays
 	my_arr *dev_graph;
@@ -72,8 +74,8 @@ int* dijkstra(my_arr *graph, int src)
 	for (int i = 0; i < V; i++)
 		dist[i] = INT_MAX, sptSet[i] = false;
 
-	dim3 threads = 1024; // declaring the amount of threads based on the size of V (nodes per dimension)
-	dim3 blocks = ((ceil(static_cast<float>(V) / static_cast<float>(1024)))); // defining the number of blocks that will be required.
+	dim3 threads = 32; // declaring the amount of threads based on the size of V (nodes per dimension)
+	dim3 blocks = ((ceil(static_cast<float>(V) / static_cast<float>(32)))); // defining the number of blocks that will be required.
 	// Initialize all distances as INFINITE and stpSet[] as false
 
 	// Distance of source vertex from itself is always 0
@@ -91,9 +93,16 @@ int* dijkstra(my_arr *graph, int src)
 		sptSet[minIndex] = true;
 
 		// Alloc and then copy ptr to 
-		cudaMalloc((void**)&dev_Dist, V * sizeof(int));
-		cudaMemcpy(dev_Dist, dist, V * sizeof(int), cudaMemcpyHostToDevice);
-
+		cudaError = cudaMalloc((void**)&dev_Dist, V * sizeof(int));
+		if (cudaError != cudaSuccess)
+		{
+			fprintf(stderr, "%s", cudaError);
+		}
+		cudaError = cudaMemcpy(dev_Dist, dist, V * sizeof(int), cudaMemcpyHostToDevice);
+		if (cudaError != cudaSuccess)
+		{
+			fprintf(stderr, "%s", cudaError);
+		}
 		cudaMalloc(&dev_graph, dSize);
 		cudaMemcpy(dev_graph, graph, dSize, cudaMemcpyHostToDevice);
 
@@ -134,6 +143,7 @@ int main()
 	hostDist = dijkstra(dArr, 0);
 
     printSolution<<<1, V>>>(hostDist);
+	cudaDeviceSynchronize();
 
     return 0;
 }
