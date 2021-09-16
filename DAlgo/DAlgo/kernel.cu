@@ -9,7 +9,7 @@ using namespace std;
 
 // Number of vertices in the graph
 #define V 9
-
+void convertTo1DArray();
 // A utility function to find the vertex with minimum distance value, from
 // the set of vertices not yet included in shortest path tree
 void minDistance(int dist[], bool sptSet[], int* &min_index)
@@ -57,13 +57,14 @@ __global__ void printSolution(int* dist)
 
 // Function that implements Dijkstra's single source shortest path algorithm
 // for a graph represented using adjacency matrix representation
-int* dijkstra(int graph[][V], int src)
+int* dijkstra(int *graph, int src)
 {
 	cudaError_t cudaError;
+
 	size_t dSize = V * V * sizeof(int);
 	// init an array of ptrs to more arrays
+	int test2dArr[sizeof(dSize)];
 	int *dev_graph;
-	int getme = graph[4][3];
 	int* dist = new int[V]; // The output array.  dist[i] will hold the shortest
 	int* dev_Dist = { 0 };
 
@@ -102,9 +103,11 @@ int* dijkstra(int graph[][V], int src)
 		{
 			fprintf(stderr, "%s", cudaError);
 		}
-		cudaMalloc(&dev_graph, dSize);
+		cudaMalloc((void**)&dev_graph, dSize);
 		cudaMemcpy2D(dev_graph, dSize, graph, V, V, V, cudaMemcpyHostToDevice);
 
+		cudaMemcpy(test2dArr, dev_graph, dSize, cudaMemcpyDeviceToHost);
+		
 		calcShortest<<<blocks, threads >>>(dev_graph, dev_Dist, sptSet, minIndex);
 
 		cudaDeviceSynchronize();
@@ -123,10 +126,11 @@ int* dijkstra(int graph[][V], int src)
 // driver program to test above function
 int main()
 {
-	int* hostDist = new int[V];
 	size_t dSize = V * V * sizeof(int);
+	int* hostDist = (int*)malloc(dSize);
+
 	/* Let us create the example graph discussed above */
-	int graph[V][V] = { { 0, 4, 0, 0, 0, 0, 0, 8, 0 },
+	int graph[V][V] = { { 0, 4, 0, 0, 0, 0, 0, 8, 0 }, // This might need to be converted to a 1d Matrix for simplicity
 						{ 4, 0, 8, 0, 0, 0, 0, 11, 0 },
 						{ 0, 8, 0, 7, 0, 4, 0, 0, 2 },
 						{ 0, 0, 7, 0, 9, 14, 0, 0, 0 },
@@ -136,12 +140,44 @@ int main()
 						{ 8, 11, 0, 0, 0, 0, 1, 0, 7 },
 						{ 0, 0, 2, 0, 0, 0, 6, 7, 0 } };
 
-	hostDist = dijkstra(graph, 0);
+	// We can convert the 2d array into a 1d array in qhich we construct a map. 
+	// We can create an array of size ArrSize ==> [(1+n)n]/2 n is the width and 
+	// // ceil(sqrt(ArrSize*2)) will provide us the width/height of our 2d array.
+	// this will produce an array of size ceil(sqrt(n*2))^2 * sizeof(int)
 
-	printSolution << <1, V >> > (hostDist);
+	// ceil(sqrt(n*2)) will provide us the width/height of our 2d array.
+
+	convertTo1DArray();
+	memcpy(hostDist, graph, dSize);
+	cudaMemcpy2D(hostDist, dSize, graph, dSize, V, V, cudaMemcpyHostToHost);
+	int* sol = dijkstra(hostDist, 0);
+
+	printSolution << <1, V >> > (sol);
 	cudaDeviceSynchronize();
 
 	return 0;
 }
 
-// This code is contributed by shivanisinghss2110
+int getMallocSize(int arrayPitch)
+{
+	int size = pow(arrayPitch, 2.0) * sizeof(int);
+	return size;
+}
+void convertTo1DArray()
+{
+	int testArr[6] = { 1, 0, 2, 5, 4, 6 };
+	int elements = sizeof(testArr) / sizeof(int);
+	int arrPitch = ceil(sqrt(static_cast<double>(elements * 2)));
+	int totalSize = getMallocSize(arrPitch);
+	int *output = (int*)malloc(getMallocSize(arrPitch));
+	memset(output, 0, totalSize);
+	for (int i = 0; i < arrPitch; i++)
+	{
+		float diagonal = floor(static_cast<float>(i)/ static_cast<float>((arrPitch + 1)));
+
+		for (int x = 0; x < arrPitch - 1; x++)
+		{
+			output[(x * 5) + (1 + i)] = testArr[(0 + x + i) % elements]; // currently working on a solution to this
+		}
+	}
+}
