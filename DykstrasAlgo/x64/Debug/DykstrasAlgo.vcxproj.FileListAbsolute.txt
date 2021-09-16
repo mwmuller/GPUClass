@@ -1,2 +1,0 @@
-C:\Users\Michael Muller\source\repos\DykstrasAlgo\x64\Debug\DykstrasAlgo.exe
-C:\Users\Michael Muller\source\repos\DykstrasAlgo\x64\Debug\DykstrasAlgo.pdb
