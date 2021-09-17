@@ -1,11 +1,13 @@
 ﻿  Compiling CUDA source file kernel.cu...
   
   G:\GPUClass\DAlgo\DAlgo>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.4\bin\nvcc.exe" -gencode=arch=compute_52,code=\"sm_52,compute_52\" --use-local-env -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Tools\MSVC\14.16.27023\bin\HostX86\x64" -x cu   -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.4\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.4\include"  -G   --keep-dir x64\Debug  -maxrregcount=0  --machine 64 --compile -cudart static  -g  -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /Fdx64\Debug\vc141.pdb /FS /Zi /RTC1 /MDd " -o x64\Debug\kernel.cu.obj "G:\GPUClass\DAlgo\DAlgo\kernel.cu" 
-g:\gpuclass\dalgo\dalgo\kernel.cu(128): warning : variable "getit" was declared but never referenced
+g:\gpuclass\dalgo\dalgo\kernel.cu(131): warning : variable "getit" was declared but never referenced
   
-g:\gpuclass\dalgo\dalgo\kernel.cu(135): warning : variable "getity" was declared but never referenced
+g:\gpuclass\dalgo\dalgo\kernel.cu(138): warning : variable "getity" was declared but never referenced
   
-g:\gpuclass\dalgo\dalgo\kernel.cu(152): warning : variable "devDist" was declared but never referenced
+g:\gpuclass\dalgo\dalgo\kernel.cu(122): warning : variable "inputElements" was declared but never referenced
+  
+g:\gpuclass\dalgo\dalgo\kernel.cu(155): warning : variable "devDist" was declared but never referenced
   
   kernel.cu
 g:\gpuclass\dalgo\dalgo\kernel.cu(70): warning C4244: 'argument': conversion from 'float' to 'unsigned int', possible loss of data
@@ -13,7 +15,7 @@ g:\gpuclass\dalgo\dalgo\kernel.cu(97): warning C4477: 'fprintf' : format string 
 g:\gpuclass\dalgo\dalgo\kernel.cu(97): warning C4313: 'fprintf': '%s' in format string conflicts with argument 1 of type 'int'
 g:\gpuclass\dalgo\dalgo\kernel.cu(102): warning C4477: 'fprintf' : format string '%s' requires an argument of type 'char *', but variadic argument 1 has type 'int'
 g:\gpuclass\dalgo\dalgo\kernel.cu(102): warning C4313: 'fprintf': '%s' in format string conflicts with argument 1 of type 'int'
-g:\gpuclass\dalgo\dalgo\kernel.cu(174): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-g:\gpuclass\dalgo\dalgo\kernel.cu(182): warning C4244: 'argument': conversion from 'float' to 'unsigned int', possible loss of data
-g:\gpuclass\dalgo\dalgo\kernel.cu(152): warning C4101: 'devDist': unreferenced local variable
+g:\gpuclass\dalgo\dalgo\kernel.cu(177): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+g:\gpuclass\dalgo\dalgo\kernel.cu(185): warning C4244: 'argument': conversion from 'float' to 'unsigned int', possible loss of data
+g:\gpuclass\dalgo\dalgo\kernel.cu(155): warning C4101: 'devDist': unreferenced local variable
   DAlgo.vcxproj -> G:\GPUClass\DAlgo\x64\Debug\DAlgo.exe

@@ -117,10 +117,13 @@ void dijkstra(int *graph, int src, int* arrPitch)
 
 __global__ void create1DMap(int* inputArr, int *outputArr, int *inPitch)
 {
-	int arrPitch = *inPitch;
-	int topArr = 0, botArr = 0;
-
 	int i = blockIdx.x*blockDim.x + threadIdx.x;
+	int arrPitch = *inPitch;
+	int inputElements = (arrPitch*(arrPitch - 1)) / 2;
+
+
+	int topArr = (((i + 2) * (i + 1)) / 2) - 1;
+	int botArr = topArr;
 	if (i < arrPitch - 1)
 	{
 		for (int x = 0; x < arrPitch - (i + 1); x++)
@@ -153,7 +156,7 @@ int main()
 	int* devInArrSize;
 	int* devArrPitch;
 	/* Let us create the example graph discussed above */
-	/*
+	
 	int graph[] = { 4, 0, 0, 0, 0, 0, 8, 0,
 					8, 0, 0, 0, 0, 11, 0,
 					7, 0, 4, 0, 0, 2,
@@ -162,8 +165,8 @@ int main()
 					2, 0, 0,
 					1, 6,
 					7}; // this is out simplified graph
-					*/
-	int graph[] = { 1,0,2,5,4,6 };
+					
+	//int graph[] = { 1,0,2,5,4,6 };
 
 	// We can create an array of size ArrSize ==> [(1+n)n]/2 n is the width and 
 	// ceil(sqrt(ArrSize*2)) will provide us the width/height of our 2d array.
@@ -184,19 +187,10 @@ int main()
 	hostGraph = (int*)malloc(totalCudaMallocSize);
 	memset(hostGraph, 0, totalCudaMallocSize);
 
-	cudaMalloc((void**)&devInGraph, sizeof(graph) * sizeof(int));
-	cudaMemcpy(devInGraph, graph, sizeof(graph) * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMalloc((void**)&devInGraph, elements * sizeof(int));
+	cudaMemcpy(devInGraph, graph, elements * sizeof(int), cudaMemcpyHostToDevice);
 
-	int *test = (int*)malloc(*arrPitch * sizeof(int));
 
-	memset(test, 0, *arrPitch * sizeof(int));
-
-	cudaMemcpy(test, devInGraph, *arrPitch * sizeof(int), cudaMemcpyDeviceToHost);
-
-	for (int i = 0; i < *arrPitch; i++)
-	{
-		printf("%d", test[i]);
-	}
 	cudaMalloc((void**)&devOutGraph, totalCudaMallocSize);
 	cudaMemset(devOutGraph, 0, totalCudaMallocSize);
 
@@ -215,7 +209,11 @@ int main()
 	for (int i = 0; i < hostSize; i++)
 	{
 		int getit = hostGraph[i];
-		printf("%d", getit);
+		if (i % *arrPitch == 0)
+		{
+			printf("\n");
+		}
+		printf("%d  ", getit);
 	}
 	dijkstra(hostGraph, 0, arrPitch);
 	
