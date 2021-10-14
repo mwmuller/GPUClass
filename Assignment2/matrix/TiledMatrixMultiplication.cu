@@ -86,6 +86,7 @@ __global__ void matrixMultiplyMultiTile(const float * A, const float * B, float 
 	int row = ty + blockDim.y * by;
 	int col = tx + blockDim.x * bx;
 	float Cvalue = 0;
+	int tileMultipleCol = col + (blockIdx.x * TILE_WIDTH * (MULTI_TILE - 1));
 	for (int i = 0; i < ceil((float)numAColumns / (TILE_WIDTH)); i++)
 	{
 		if ((i*TILE_WIDTH + tx) < numAColumns && row < numARows)
@@ -99,9 +100,9 @@ __global__ void matrixMultiplyMultiTile(const float * A, const float * B, float 
 
 		for (int f = 0; f < MULTI_TILE; f++) // Include the next Y block of B 
 		{
-			if ((i*TILE_WIDTH + ty) < numAColumns && (col + (blockIdx.x * TILE_WIDTH * MULTI_TILE) + (f * TILE_WIDTH) < numBColumns))
+			if ((i*TILE_WIDTH + ty) < numAColumns && (tileMultipleCol + (f * TILE_WIDTH) < numBColumns))
 			{
-				ds_B[ty][tx + (f * TILE_WIDTH)] = B[(i * TILE_WIDTH + ty)*numBColumns + (col + (blockIdx.x * TILE_WIDTH * MULTI_TILE)) + (f * TILE_WIDTH)];
+				ds_B[ty][tx + (f * TILE_WIDTH)] = B[(i * TILE_WIDTH + ty)*numBColumns + (tileMultipleCol) + (f * TILE_WIDTH)];
 			}
 			else
 			{
@@ -115,19 +116,19 @@ __global__ void matrixMultiplyMultiTile(const float * A, const float * B, float 
 			Cvalue = 0; // Reset Cvalue
 			for (int p = 0; p < (TILE_WIDTH); p++)
 			{
-				if ((col + blockIdx.x * TILE_WIDTH * MULTI_TILE) + (m * TILE_WIDTH) < numBColumns && row < numAColumns) // currently incorrect.
+				if ((tileMultipleCol) + (m * TILE_WIDTH) < numBColumns && row < numAColumns) // currently incorrect.
 				{
 					Cvalue += ds_A[ty][p] * ds_B[p][tx + (m * TILE_WIDTH)];
 				}
 				else // We are on the last set of tiles. works on 16x16
 				{
-					Cvalue += ds_A[ty][p] * ds_B[p][tx];
+					Cvalue += ds_A[ty][p] * ds_B[p][tx + (m * TILE_WIDTH)];
 				}
 				__syncthreads();
 			}
-			if (row < numARows && (col + (blockIdx.x * TILE_WIDTH * MULTI_TILE) + (m * TILE_WIDTH)) < numBColumns)
+			if (row < numARows && (tileMultipleCol + (m * TILE_WIDTH)) < numBColumns)
 			{
-				C[row*numBColumns + (col + (blockIdx.x * TILE_WIDTH * MULTI_TILE) + (m * TILE_WIDTH))] += roundFloat(Cvalue); // index 16, row1, col 0, m 0
+				C[row*numBColumns + (tileMultipleCol + (m * TILE_WIDTH))] += roundFloat(Cvalue); // index 16, row1, col 0, m 0
 			}
 		}
 	}
@@ -216,8 +217,7 @@ int main(int argc, char **argv) {
 	wbTime_start(Compute, "Performing basic tiled computation");
 
 	// TODO: Launch the basic tiled GPU Kernel here
-	matrixMultiplyMultiTile << <dimBlock, dimGrid >> > (deviceA, deviceB, deviceC, numARows, numAColumns, numBColumns);
-	//matrixMultiplyTiled << <dimBlock, dimGrid >> > (deviceA, deviceB, deviceC, numARows, numAColumns, numBColumns);
+	matrixMultiplyTiled << <dimBlock, dimGrid >> > (deviceA, deviceB, deviceC, numARows, numAColumns, numBColumns);
 	cudaDeviceSynchronize();
 	wbTime_stop(Compute, "Performing basic tiled computation");
 
@@ -227,16 +227,6 @@ int main(int argc, char **argv) {
 	// TODO: copy the GPU memory back to the CPU here
 
 	cudaMemcpy(hostC, deviceC, sizeof(float)*numARows*numBColumns, cudaMemcpyDeviceToHost);
-	
-	for (int i = 0; i < numARows*numBColumns; i++)
-	{
-		if (i % numBColumns == 0)
-		{
-			printf("||\n");
-		}
-
-		printf("%f ,", hostC[i]);
-	}
 	
 	cudaDeviceSynchronize();
 	wbTime_stop(Copy, "Copying output memory to the CPU");
@@ -255,7 +245,6 @@ int main(int argc, char **argv) {
 	cudaDeviceSynchronize();
 	
 	cudaMemcpy(hostC, deviceC, sizeof(float)*numARows*numBColumns, cudaMemcpyDeviceToHost);
-	
 	
 	wbTime_stop(Compute, "Performing multi-tiled computation");
 
