@@ -30,11 +30,13 @@ __global__ void calcShortest(int *graph, int* dist, bool* sptSet, int minIndex, 
 	int thread = blockIdx.x*blockDim.x + threadIdx.x;
 	if (thread < arrPitch)
 	{
-		int graphVal = graph[minIndex*arrPitch + thread];
-		int distVal = dist[minIndex];
-			if (!sptSet[thread] && graphVal && distVal != INT_MAX
-				&& ((distVal + graphVal) < dist[thread]))
-				dist[thread] = distVal + graphVal;
+		int graphRow = thread * arrPitch;
+		for (int i = 0; i < arrPitch; i++)
+		{
+			if (!sptSet[thread] && graph[graphRow + i] && dist[thread] != INT_MAX
+				&& ((dist[thread] + graph[graphRow + i]) < dist[thread]))
+				dist[thread] = dist[thread] + graph[graphRow + i];
+		}
 	}
 }
 
@@ -75,8 +77,6 @@ void dijkstra(int *graph, int src, int* arrPitch)
 	cudaMalloc((void**)&devicesptSet, thisPitch*sizeof(bool));
 	cudaMalloc((void**)&dev_graph, dSize);
 	cudaMemcpy(dev_graph, graph, dSize, cudaMemcpyHostToDevice);
-	for (int count = 0; count < thisPitch - 1; count++)
-	{
 		// Find shortest path for all vertices
 		int *u = new int(0);
 		int minIndex = 0;
@@ -103,10 +103,9 @@ void dijkstra(int *graph, int src, int* arrPitch)
 		}
 
 		calcShortest << <blocks, threads >> > (dev_graph, dev_Dist, sptSet, minIndex, thisPitch);
-		cudaMemcpy(dist, dev_Dist, dSize, cudaMemcpyDeviceToHost);
-		cudaMemcpy(sptSet, devicesptSet, dSize, cudaMemcpyDeviceToHost);
-	}
+		cudaMemcpy(dist, dev_Dist, thisPitch * sizeof(int), cudaMemcpyDeviceToHost);
 
+		cudaFree(dev_graph);
 		cudaFree(dev_Dist);
 
 		printSolution(dist, thisPitch);
@@ -156,7 +155,7 @@ int main()
 	int* devInArrSize;
 	int* devArrPitch;
 	/* Let us create the example graph discussed above */
-	
+	/*
 	int graph[] = { 4, 1, 0, 5, 0, 0, 8, 0,
 					8, 0, 0, 0, 0, 11, 0,
 					7, 0, 4, 0, 2, 2,
@@ -164,9 +163,9 @@ int main()
 					10, 0, 0, 0,
 					2, 0, 0,
 					1, 6,
-					7}; // this is out simplified graph
-				
-	//int graph[] = { 1,0,2,5,4,6,0,1,0,3};
+					7 }; // this is out simplified graph
+			*/	
+	int graph[] = { 1,0,2,5,4,6,0,1,0,3};
 
 	// We can create an array of size ArrSize ==> [(1+n)n]/2 n is the width and 
 	// ceil(sqrt(ArrSize*2)) will provide us the width/height of our 2d array.
