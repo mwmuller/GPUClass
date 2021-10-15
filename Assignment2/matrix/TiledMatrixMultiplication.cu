@@ -87,48 +87,50 @@ __global__ void matrixMultiplyMultiTile(const float * A, const float * B, float 
 	int col = tx + blockDim.x * bx;
 	float Cvalue = 0;
 	int tileMultipleCol = col + (blockIdx.x * TILE_WIDTH * (MULTI_TILE - 1));
-	for (int i = 0; i < ceil((float)numAColumns / (TILE_WIDTH)); i++)
-	{
-		if ((i*TILE_WIDTH + tx) < numAColumns && row < numARows)
-		{
-			ds_A[ty][tx] = A[row*numAColumns + (i * TILE_WIDTH + tx)];
-		}
-		else
-		{
-			ds_A[ty][tx] = 0;
-		}
 
-		for (int f = 0; f < MULTI_TILE; f++) // Include the next Y block of B 
+	if (tileMultipleCol < numBColumns)
+	{
+		for (int i = 0; i < ceil((float)numAColumns / (TILE_WIDTH)); i++)
 		{
-			if ((i*TILE_WIDTH + ty) < numAColumns && (tileMultipleCol + (f * TILE_WIDTH) < numBColumns))
+			if ((i*TILE_WIDTH + tx) < numAColumns && row < numARows)
 			{
-				ds_B[ty][tx + (f * TILE_WIDTH)] = B[(i * TILE_WIDTH + ty)*numBColumns + (tileMultipleCol) + (f * TILE_WIDTH)];
+				ds_A[ty][tx] = A[row*numAColumns + (i * TILE_WIDTH + tx)];
 			}
 			else
 			{
-				ds_B[ty][tx + (f * TILE_WIDTH)] = 0;
+				ds_A[ty][tx] = 0;
 			}
-		}
-		__syncthreads();
 
-		for (int m = 0; m < MULTI_TILE; m++)
-		{
-			Cvalue = 0; // Reset Cvalue
-			for (int p = 0; p < (TILE_WIDTH); p++)
+			for (int f = 0; f < MULTI_TILE; f++) // Include the next Y block of B 
 			{
-				if ((tileMultipleCol) + (m * TILE_WIDTH) < numBColumns && row < numAColumns) // currently incorrect.
+				if ((i*TILE_WIDTH + ty) < numAColumns && (tileMultipleCol + (f * TILE_WIDTH) < numBColumns))
 				{
-					Cvalue += ds_A[ty][p] * ds_B[p][tx + (m * TILE_WIDTH)];
+					ds_B[ty][tx + (f * TILE_WIDTH)] = B[(i * TILE_WIDTH + ty)*numBColumns + (tileMultipleCol)+(f * TILE_WIDTH)];
 				}
-				else // We are on the last set of tiles. works on 16x16
-				{
-					Cvalue += ds_A[ty][p] * ds_B[p][tx + (m * TILE_WIDTH)];
-				}
+
 				__syncthreads();
-			}
-			if (row < numARows && (tileMultipleCol + (m * TILE_WIDTH)) < numBColumns)
-			{
-				C[row*numBColumns + (tileMultipleCol + (m * TILE_WIDTH))] += roundFloat(Cvalue); // index 16, row1, col 0, m 0
+
+				Cvalue = 0; // Reset Cvalue
+				for (int p = 0; p < (TILE_WIDTH); p++)
+				{
+					if ((tileMultipleCol)+(f * TILE_WIDTH) < numBColumns && row < numAColumns)
+					{
+						Cvalue += ds_A[ty][p] * ds_B[p][tx + (f * TILE_WIDTH)];
+					}
+					else if ((tx)+(f * TILE_WIDTH) < numBColumns) // We are on the last set of tiles. works on 16x16
+					{
+						Cvalue += ds_A[ty][p] * ds_B[p][tx + (f * TILE_WIDTH)];
+					}
+					else
+					{
+						break;
+					}
+					__syncthreads();
+				}
+				if (row < numARows && (tileMultipleCol + (f * TILE_WIDTH)) < numBColumns)
+				{
+					C[row*numBColumns + (tileMultipleCol + (f * TILE_WIDTH))] += Cvalue; // index 16, row1, col 0, m 0
+				}
 			}
 		}
 	}
@@ -207,12 +209,12 @@ int main(int argc, char **argv) {
 	cudaMemcpy(deviceA, hostA, sizeof(float)*numARows*numAColumns, cudaMemcpyHostToDevice);
 	cudaMemcpy(deviceB, hostB, sizeof(float)*numAColumns*numBColumns, cudaMemcpyHostToDevice);
 	cudaMemset(deviceC, 0, sizeof(float)*numARows*numBColumns);
-	
+
 	wbTime_stop(GPU, "Copying input memory to the GPU.");
 
 	// TODO: initialize the grid and block dimensions
 	dim3 dimGrid(TILE_WIDTH, TILE_WIDTH);
-	dim3 dimBlock(ceil(((float)numBColumns)/ dimGrid.x), ceil(((float)numARows)/ dimGrid.y));
+	dim3 dimBlock(ceil(((float)numBColumns) / dimGrid.x), ceil(((float)numARows) / dimGrid.y));
 
 	wbTime_start(Compute, "Performing basic tiled computation");
 
@@ -227,7 +229,7 @@ int main(int argc, char **argv) {
 	// TODO: copy the GPU memory back to the CPU here
 
 	cudaMemcpy(hostC, deviceC, sizeof(float)*numARows*numBColumns, cudaMemcpyDeviceToHost);
-	
+
 	cudaDeviceSynchronize();
 	wbTime_stop(Copy, "Copying output memory to the CPU");
 
@@ -241,11 +243,11 @@ int main(int argc, char **argv) {
 
 	wbTime_start(Compute, "Performing multi-tiled computation");
 
-	matrixMultiplyMultiTile<<<dimBlock, dimGrid>>>(deviceA, deviceB, deviceC, numARows, numAColumns, numBColumns);
+	matrixMultiplyMultiTile << <dimBlock, dimGrid >> > (deviceA, deviceB, deviceC, numARows, numAColumns, numBColumns);
 	cudaDeviceSynchronize();
-	
+
 	cudaMemcpy(hostC, deviceC, sizeof(float)*numARows*numBColumns, cudaMemcpyDeviceToHost);
-	
+
 	wbTime_stop(Compute, "Performing multi-tiled computation");
 
 	wbTime_start(Copy, "Copying output memory to the CPU 2");

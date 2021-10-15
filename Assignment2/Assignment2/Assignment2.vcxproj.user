@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LocalDebuggerCommandArguments>-i E:\GPUclass\Assignment2\Dataset\0\input0.raw,E:\GPUclass\Assignment2\Dataset\0\input1.raw -e E:\GPUclass\Assignment2\Dataset\0\output.raw -t matrix</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-i G:\GPUClassAssignments\Assignment2\Dataset\6\input0.raw,G:\GPUClassAssignments\Assignment2\Dataset\6\input1.raw -e G:\GPUClassAssignments\Assignment2\Dataset\6\output.raw -t matrix</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
 </Project>
