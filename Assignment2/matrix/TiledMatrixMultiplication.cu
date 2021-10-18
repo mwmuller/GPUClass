@@ -56,7 +56,7 @@ __global__ void matrixMultiplyTiled(const float * A, const float * B, float * C,
 		{
 			Cvalue += ds_A[ty][p] * ds_B[p][tx];
 		}
-   __syncthreads();
+		__syncthreads();
 	}
 	if (row < numARows && col < numBColumns)
 	{
@@ -100,20 +100,20 @@ __global__ void matrixMultiplyMultiTile(const float * A, const float * B, float 
 				{
 					ds_B[ty][tx + (f * TILE_WIDTH)] = B[(i * TILE_WIDTH + ty)*numBColumns + (tileMultipleCol)+(f * TILE_WIDTH)];
 				}
-        else
-        {
-          ds_B[ty][tx + (f * TILE_WIDTH)] = 0;
-        }
-      }
-      __syncthreads();
-      for (int f = 0; f < MULTI_TILE; f++) // Include the next Y block of B 
+				else
+				{
+					ds_B[ty][tx + (f * TILE_WIDTH)] = 0;
+				}
+			}
+			__syncthreads();
+			for (int f = 0; f < MULTI_TILE; f++) // Include the next Y block of B 
 			{
 				for (int p = 0; p < (TILE_WIDTH); p++)
 				{
 					Cvalue[f] += ds_A[ty][p] * ds_B[p][tx + (f * TILE_WIDTH)];
 				}
 			}
-      __syncthreads();
+			__syncthreads();
 		}
 		for (int f = 0; f < MULTI_TILE; f++)
 		{
@@ -229,7 +229,7 @@ int main(int argc, char **argv) {
 	cudaFree(deviceC);
 	cudaMalloc((void**)&deviceC, sizeof(float)*numARows*numBColumns);
 	cudaMemset(deviceC, 0, sizeof(float)*numARows*numBColumns);
-  
+
 	wbTime_start(Compute, "Performing multi-tiled computation");
 
 	matrixMultiplyMultiTile << <dimBlock, dimGrid >> > (deviceA, deviceB, deviceC, numARows, numAColumns, numBColumns);
