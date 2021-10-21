@@ -137,8 +137,11 @@ int main(int argc, char **argv) {
   //@@Allocating GPU Memory		
   wbTime_start(GPU, "Allocating GPU memory.");
  
-  cudaMalloc((void**)deviceInput, sizeof(float)*numElements);
-  cudaMalloc((void**)deviceOutput, sizeof(float)*numElements);
+  cudaMalloc((void**)&deviceInput, sizeof(float)*numElements);
+  cudaMalloc((void**)&deviceOutput, sizeof(float)*numElements);
+
+  cudaMalloc((void**)&deviceAuxArray, (BLOCK_SIZE << 1) * sizeof(float));
+  cudaMalloc((void**)&deviceAuxScannedArray, (BLOCK_SIZE << 1) * sizeof(float));
     
  
   wbTime_stop(GPU, "Allocating GPU memory.");
@@ -154,24 +157,32 @@ int main(int argc, char **argv) {
   //@@Copying input memory to the GPU
   wbTime_start(GPU, "Copying input memory to the GPU.");
   
-  cudaMemcpy(deviceInput, hostInput, sizeof(float)*numElements, cudaMemcpyHostToDevice);
+  wbCheck(cudaMemcpy(deviceInput, hostInput, sizeof(float)*numElements, cudaMemcpyHostToDevice));
   
   wbTime_stop(GPU, "Copying input memory to the GPU.");
 
   
   
   //@@ Initialize the grid and block dimensions here
-
+  int numBlocks = ceil((float)numElements / (BLOCK_SIZE << 1));
    
+  dim3 dimGrid(numBlocks);
+  dim3 blockDim(BLOCK_SIZE);
 
   
   //@@Performing CUDA computation
   wbTime_start(Compute, "Performing CUDA computation");
   //@@ Modify this to complete the functionality of the scan
   //@@ on the device
+  scan << <dimGrid, blockDim >> > (deviceInput, deviceOutput, deviceAuxArray, numElements);
   
+  cudaDeviceSynchronize();
+
+  scan << <dimGrid, blockDim >> > (deviceAuxArray, deviceAuxScannedArray, NULL, (BLOCK_SIZE<<1));
  
-  
+  cudaDeviceSynchronize();
+
+  fixup << <1, blockDim >> > (deviceOutput, deviceAuxScannedArray, numElements);
   
   wbTime_stop(Compute, "Performing CUDA computation");
   
@@ -179,7 +190,7 @@ int main(int argc, char **argv) {
   //@@Copying output memory to the CPU
   wbTime_start(Copy, "Copying output memory to the CPU");
   
-  
+  cudaMemcpy(hostOutput, deviceOutput, sizeof(float)*numElements, cudaMemcpyDeviceToHost);
   
   wbTime_stop(Copy, "Copying output memory to the CPU");
 
@@ -187,7 +198,10 @@ int main(int argc, char **argv) {
   
   //@@Freeing GPU Memory
   wbTime_start(GPU, "Freeing GPU Memory");
-  
+  cudaFree(deviceInput);
+  cudaFree(deviceOutput);
+  cudaFree(deviceAuxArray);
+  cudaFree(deviceAuxScannedArray);
   
   
   wbTime_stop(GPU, "Freeing GPU Memory");
