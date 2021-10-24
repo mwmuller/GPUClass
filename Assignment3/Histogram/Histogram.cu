@@ -9,7 +9,7 @@
 #define NUM_BINS 4096
 #define SATURATION 127
 #define THREADS 256
-
+#define BLOCKS 32
 #define CUDA_CHECK(ans)                                                   \
   { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line,
@@ -26,34 +26,28 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 /// Will construct the bins
 __global__ void histogram(unsigned int *input, unsigned int *bins, unsigned int inputLength)
 {
+	
+	// BlockDim is inputlength / threads for each block. 
 	__shared__ unsigned int bins_s[NUM_BINS];
-	__shared__ unsigned int temp;
-	unsigned int thread = blockDim.x * blockIdx.x + threadIdx.x; // get me 0 to 4095
 
-	if (thread < NUM_BINS) // psuedo memset to 0
+	unsigned int thread = blockDim.x * blockIdx.x + threadIdx.x; // gets the thread Id. 
+	unsigned int stride = gridDim.x * blockDim.x; // get the stride. 
+
+	unsigned int threadInc = thread; // Sets the thread increment value. 
+
+	while(threadInc < inputLength) // after each increment, check if we are in bounds.
 	{
-		bins_s[thread] = 0;
+		atomicAdd(&bins_s[input[threadInc]], 1); // increment the index in bins
+		threadInc += stride; // increment the threadInc
 	}
+
 	__syncthreads();
-	unsigned int stride = gridDim.x * blockDim.x;
-	unsigned int threadIndex = thread;
-
-	while (threadIndex < inputLength)
-	{
-		unsigned int binIndex = input[threadIndex];
-
-		if (bins_s[binIndex] < 127)
-		{
-			atomicAdd(&bins_s[binIndex], 1);
-		}
-		threadIndex += stride;
-	}
-	__syncthreads();
-
-	if (thread < inputLength)
+	if (thread < NUM_BINS) // This should make sure we do not excede the BINS
 	{
 		atomicAdd(&bins[thread], bins_s[thread]);
 	}
+	__syncthreads();
+
 }
 
 int main(int argc, char *argv[]) {
@@ -67,17 +61,18 @@ int main(int argc, char *argv[]) {
   args = wbArg_read(argc, argv);
 
   wbTime_start(Generic, "Importing data and creating memory on host");
+
   hostInput = (unsigned int *)wbImport(wbArg_getInputFile(args, 0),
                                        &inputLength, "Integer");
   hostBins = (unsigned int *)malloc(NUM_BINS * sizeof(unsigned int));
-  wbTime_stop(Generic, "Importing data and creating memory on host");
 
+  wbTime_stop(Generic, "Importing data and creating memory on host");
   wbLog(TRACE, "The input length is ", inputLength); 
   wbLog(TRACE, "The number of bins is ", NUM_BINS);
 
   wbTime_start(GPU, "Allocating GPU memory.");
   //@@ Allocate GPU memory here
-  cudaMalloc((void**)&deviceInput, sizeof(unsigned int) * inputLength);
+  cudaMalloc((void**)&deviceInput, inputLength*sizeof(unsigned int));
   cudaMalloc((void**)&deviceBins, sizeof(unsigned int) * NUM_BINS);
 
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -85,7 +80,7 @@ int main(int argc, char *argv[]) {
 
   wbTime_start(GPU, "Copying input memory to the GPU.");
   //@@ Copy memory to the GPU here
-  cudaMemcpy(deviceInput, hostInput, sizeof(unsigned int)*inputLength, cudaMemcpyHostToDevice);
+  cudaMemcpy(deviceInput, hostInput, inputLength*sizeof(unsigned int), cudaMemcpyHostToDevice);
   cudaMemset(deviceBins, 0, sizeof(unsigned int)*NUM_BINS);
 
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -95,7 +90,7 @@ int main(int argc, char *argv[]) {
   // ----------------------------------------------------------
   wbLog(TRACE, "Launching kernel");
 
-  dim3 gridDim(ceil(((float)inputLength / THREADS)));
+  dim3 gridDim(BLOCKS);
   dim3 blockDim(THREADS);
 
   wbTime_start(Compute, "Performing CUDA computation");
@@ -111,7 +106,7 @@ int main(int argc, char *argv[]) {
   cudaMemcpy(hostBins, deviceBins, sizeof(unsigned int)*NUM_BINS, cudaMemcpyDeviceToHost);
   for(int i = 0; i < NUM_BINS; i++)
   {
-	  if (i == 1098)
+	  if (hostBins[i] >= 1)
 	  {
 		  printf("index %d = %d \n", i, hostBins[i]);
 	  }
