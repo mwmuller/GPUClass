@@ -10,6 +10,7 @@
 #define SATURATION 127
 #define THREADS 256
 #define BLOCKS 32
+
 #define CUDA_CHECK(ans)                                                   \
   { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line,
@@ -30,24 +31,47 @@ __global__ void histogram(unsigned int *input, unsigned int *bins, unsigned int 
 	// BlockDim is inputlength / threads for each block. 
 	__shared__ unsigned int bins_s[NUM_BINS];
 
-	unsigned int thread = blockDim.x * blockIdx.x + threadIdx.x; // gets the thread Id. 
+	unsigned int thread = (blockDim.x * blockIdx.x) + threadIdx.x; // gets the thread Id. 
 	unsigned int stride = gridDim.x * blockDim.x; // get the stride. 
+
+	for (int j = threadIdx.x; j < NUM_BINS; j += THREADS)
+	{
+		if (j < NUM_BINS) // This should make sure we do not excede the BINS
+		{
+			bins_s[j] = 0;
+		}
+	}
+	__syncthreads();
 
 	unsigned int threadInc = thread; // Sets the thread increment value. 
 
 	while(threadInc < inputLength) // after each increment, check if we are in bounds.
 	{
-		atomicAdd(&bins_s[input[threadInc]], 1); // increment the index in bins
+		atomicAdd(&(bins_s[input[threadInc]]), 1); // increment the index in bins
+
 		threadInc += stride; // increment the threadInc
 	}
 
 	__syncthreads();
-	if (thread < NUM_BINS) // This should make sure we do not excede the BINS
+	for (int j = threadIdx.x; j < NUM_BINS; j += THREADS)
 	{
-		atomicAdd(&bins[thread], bins_s[thread]);
+		if (j < NUM_BINS) // This should make sure we do not excede the BINS
+		{
+			atomicAdd(&(bins[j]), bins_s[j]);
+		}
 	}
 	__syncthreads();
+	
+	for (int j = threadIdx.x; j < NUM_BINS; j += THREADS)
+	{
+		
+		if (bins[j] > SATURATION)
+		{
+			bins[j] = SATURATION;
+		}
+	}
 
+	__syncthreads();
 }
 
 int main(int argc, char *argv[]) {
