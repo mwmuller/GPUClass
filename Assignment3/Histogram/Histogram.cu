@@ -128,13 +128,6 @@ int main(int argc, char *argv[]) {
   wbTime_start(Copy, "Copying output memory to the CPU");
   //@@ Copy the GPU memory back to the CPU here
   cudaMemcpy(hostBins, deviceBins, sizeof(unsigned int)*NUM_BINS, cudaMemcpyDeviceToHost);
-  for(int i = 0; i < NUM_BINS; i++)
-  {
-	  if (hostBins[i] >= 1)
-	  {
-		  printf("index %d = %d \n", i, hostBins[i]);
-	  }
-  }
 
   CUDA_CHECK(cudaDeviceSynchronize());
   wbTime_stop(Copy, "Copying output memory to the CPU");

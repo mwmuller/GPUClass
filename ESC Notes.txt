@@ -26,3 +26,14 @@ wbimport( used to import data from a file)
 __WB_H__ -> will need to recompile it (wb.h)
 
 #define JSON_OUTPUT
+
+
+Warps calculate 32 threads per block. For 256 threads per block, and 4 blocks, we will have (256/warpSize (32) * number of blocks (4) = 32 warps to finish 1024 total threads
+
+Memory Coalescing - Are we accessing memory efficiently? 
+
+Divergence - Does a thread during a specific warp take a different path that expected when executing? If so, then that warp diverges. 
+
+Knowledge of warps helps us to fully utilize our efficiency when developing a kernel. 
+
+frequency for calculations. 1G = 1,000,000,000. If each global read takes 100ns to complete, then we have an read speed of 1G/100ns ==> 0.01G 
