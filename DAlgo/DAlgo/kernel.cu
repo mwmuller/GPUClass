@@ -114,7 +114,7 @@ void dijkstra(int *graph, int src, int* arrPitch)
 		// smaller than current value of dist[v]
 }
 
-__global__ void create1DMap(int* inputArr, int *outputArr, int *inPitch)
+__global__ void create1DMapUnstructured(int* inputArr, int *outputArr, int *inPitch)
 {
 	int i = blockIdx.x*blockDim.x + threadIdx.x;
 	int arrPitch = *inPitch;
@@ -199,7 +199,7 @@ int main()
 	cudaMalloc((void**)&devInArrSize, sizeof(int));
 	cudaMemcpy(devArrPitch, arrPitch, sizeof(int), cudaMemcpyHostToDevice);
 
-	create1DMap<<<blocks, threads>>>(devInGraph, devOutGraph, devArrPitch);
+	create1DMapUnstructured<<<blocks, threads>>>(devInGraph, devOutGraph, devArrPitch);
 
 	cudaDeviceSynchronize();
 	int hostSize = (*arrPitch)* (*arrPitch);
