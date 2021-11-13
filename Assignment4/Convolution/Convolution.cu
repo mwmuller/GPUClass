@@ -17,8 +17,8 @@
 
 #define Mask_width 5
 #define Mask_radius Mask_width / 2
-#define TILE_WIDTH 16 // input tile width
-#define w (TILE_WIDTH + Mask_width - 1) // output tile width
+#define TILE_WIDTH 12 // output tile width
+#define w (TILE_WIDTH + Mask_width - 1) // input tile width
 #define clamp(x) (min(max((x), 0.0), 1.0))
 #define Channels 3
 
@@ -31,46 +31,48 @@ __global__ void convolution(float *deviceInputImageData, const float * __restric
 {
 	int tx = threadIdx.x, ty = threadIdx.y;
 
-	int row_o = ty + w * blockIdx.y;
-	int col_o = tx + w * blockIdx.x;
+	int row_o = ty + TILE_WIDTH * blockIdx.y;
+	int col_o = tx + TILE_WIDTH * blockIdx.x;
 
 	int row_i = row_o - Mask_radius;
 	int col_i = col_o - Mask_radius;
 
-	__shared__ float s_input[w][w]; 
+	__shared__ float s_input[w][w]; // input shared memory. 
 
 	if (tx < imageWidth && ty < imageHeight)
 	{
 		for (int c = 0; c < Channels; c++)
 		{
-			if ((row_i >= 0) && (row_i < w) &&
-				(col_i >= 0) && (col_i < w))
+			if ((row_i >= 0) && (row_i < imageHeight) &&
+				(col_i >= 0) && (col_i < imageWidth))
 			{
-				s_input[ty][tx] = deviceInputImageData[(row_o * w + col_o) * Channels + c];
+				s_input[ty][tx] = deviceInputImageData[(row_i * imageWidth + col_i) * Channels + c];
 			}
 			else
 			{
 				s_input[ty][tx] = 0.0f;
 			}
+
 			__syncthreads();
+
 			float output = 0.0f;
-			for (int i = 0; i < Mask_width; i++)
+			if (tx < TILE_WIDTH && ty < TILE_WIDTH)
 			{
-				for (int j = 0; j < Mask_width; j++)
+				for (int i = 0; i < Mask_width; i++)
 				{
-					if (tx < w && ty < w)
+					for (int j = 0; j < Mask_width; j++)
 					{
-						output += s_input[i + ty][(j + tx) * Channels + c] * deviceMaskData[(i * Mask_width + j)];
+						output += s_input[i + ty][(j + tx)] * deviceMaskData[(i * Mask_width + j)];
 					}
 				}
 			}
 			__syncthreads();
-			if (row_o < w && col_o < w)
+			if (row_o < imageHeight && col_o < imageWidth)
 			{
-				deviceOutputImageData[(row_o * w + col_o) * Channels + c] = output;
+				deviceOutputImageData[(row_o * imageWidth + col_o) * Channels + c] = clamp(output);
 			}
-			__syncthreads();
 		}
+		__syncthreads();
 	}
 }
 
@@ -119,7 +121,7 @@ int main(int argc, char *argv[]) {
 
   cudaMalloc((void**)&deviceInputImageData, imageHeight * imageWidth * imageChannels * sizeof(float));
   cudaMalloc((void**)&deviceOutputImageData, imageHeight * imageWidth * imageChannels * sizeof(float));
-  
+  cudaMalloc((void**)&deviceMaskData, 25 * sizeof(float));
   wbTime_stop(GPU, "Doing GPU memory allocation");
 
   wbTime_start(Copy, "Copying data to the GPU");
@@ -127,15 +129,16 @@ int main(int argc, char *argv[]) {
 
   cudaMemcpy(deviceInputImageData, hostInputImageData, imageHeight * imageHeight * imageChannels * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(deviceOutputImageData, hostOutputImageData, imageHeight * imageHeight * imageChannels * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(deviceMaskData, hostMaskData, 25 * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpyToSymbol(mask, hostMaskData, Mask_width * Mask_width * sizeof(float));
   wbTime_stop(Copy, "Copying data to the GPU");
 
   wbTime_start(Compute, "Doing the computation on the GPU");
   //@@ INSERT CODE HERE
-  dim3 dimGrid(TILE_WIDTH, TILE_WIDTH);
-  dim3 dimBlock(ceil((float)imageHeight/TILE_WIDTH), ceil((float)imageWidth/TILE_WIDTH));
+  dim3 dimGrid(w, w);
+  dim3 dimBlock(ceil((float)imageWidth /TILE_WIDTH), ceil((float)imageHeight/TILE_WIDTH));
 
-  convolution<<<dimGrid, dimBlock>>>(deviceInputImageData, mask,
+  convolution<<<dimBlock, dimGrid>>>(deviceInputImageData, deviceMaskData,
                                      deviceOutputImageData, imageChannels,
                                      imageWidth, imageHeight);
   wbTime_stop(Compute, "Doing the computation on the GPU");
@@ -146,9 +149,10 @@ int main(int argc, char *argv[]) {
              imageWidth * imageHeight * imageChannels * sizeof(float),
              cudaMemcpyDeviceToHost);
 
- printf("Data from Host %f" , hostOutputImageData[0]);
- printf("Data from Host %f" , hostOutputImageData[1]);
- printf("Data from Host %f" , hostOutputImageData[2]);
+  printf("Host data %f", hostOutputImageData[0]);
+  printf("Host data %f", hostOutputImageData[1]);
+  printf("Host data %f", hostOutputImageData[2]);
+
   wbTime_stop(Copy, "Copying data from the GPU");
 
   wbTime_stop(GPU, "Doing GPU Computation (memory + compute)");
