@@ -2,7 +2,6 @@
 #include <vector>
 #include <iostream>
 #include <float.h>
-#include <wb.h>
 #include <cmath>
 #include <stdio.h>
 #include <string.h>
@@ -191,16 +190,16 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 				int nid = edgeArray[edge];
 				int shortWeightMin = ((shortestDistances[tid] * floatScalar) + (weightArray[edge] * floatScalar));
 				int *tempMin;
-				*tempMin = (updatingShortestDistances[nid] * floatScalar); // set ptr to min val
+				tempMin[0] = (updatingShortestDistances[nid] * floatScalar); // set ptr to min val
 				atomicMin(tempMin, shortWeightMin); // assigns minimum value to uSD pointer
-				//atomicMin(p, 2.5); // assigns minimum value to uSD pointer
+				updatingShortestDistances[nid] = (float)tempMin[0] / floatScalar;
 			}
 		}
 	}
 }
 
 /**************************/
-/* DIJKSTRA GPU KERNEL #1 */
+/* DIJKSTRA GPU KERNEL #2 */
 /**************************/
 __global__  void Kernel2(const int * __restrict__ vertexArray, const int * __restrict__ edgeArray, const float* __restrict__ weightArray,
 	bool * __restrict__ finalizedVertices, float* __restrict__ shortestDistances, float* __restrict__ updatingShortestDistances,

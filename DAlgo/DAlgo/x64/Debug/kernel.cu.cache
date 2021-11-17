@@ -1,4 +1,4 @@
-Identity=kernel.cu
+Identity=..\..\DAAlgoUn\kernel.cu
 AdditionalCompilerOptions=
 AdditionalCompilerOptions=
 AdditionalDependencies=
