@@ -56,7 +56,7 @@ void generateRandomGraph(GraphData *graph, int numVertices, int neighborsPerVert
 			int temp;
 			while (goOn == false) {
 				goOn = true;
-				temp = (rand() % graph->numVertices);
+				temp = (rand() % graph->numVertices); // move to 0;
 				for (int t = 0; t < neighborsPerVertex; t++)
 					if (temp == tempArray[t]) goOn = false;
 				if (temp == k) goOn = false;
@@ -133,7 +133,7 @@ bool allFinalizedVertices(bool *finalizedVertices, int numVertices) {
 
 	for (int i = 1; i < numVertices; i++)
 	{
-		if (finalizedVertices[i] == true)
+		if (finalizedVertices[i] == false)
 		{
 			printf("Index that is true: %d", i);
 			return false;
@@ -154,19 +154,25 @@ __global__ void initializeArrays(bool * __restrict__ d_finalizedVertices, float*
 
 	if (tid < numVertices) {
 
-		if (sourceVertex == tid) {
+		d_finalizedVertices[tid] = false;
+		d_shortestDistances[tid] = FLT_MAX;
+		d_updatingShortestDistances[tid] = FLT_MAX;
 
-			d_finalizedVertices[tid] = true;
-			d_shortestDistances[tid] = 0.f;
-			d_updatingShortestDistances[tid] = 0.f;
-		}
+		/*
+			if (sourceVertex == tid) {
 
-		else {
+				d_finalizedVertices[tid] = true;
+				d_shortestDistances[tid] = 0.f;
+				d_updatingShortestDistances[tid] = 0.f;
+			}
 
-			d_finalizedVertices[tid] = false;
-			d_shortestDistances[tid] = FLT_MAX;
-			d_updatingShortestDistances[tid] = FLT_MAX;
-		}
+			else {
+
+				d_finalizedVertices[tid] = false;
+				d_shortestDistances[tid] = FLT_MAX;
+				d_updatingShortestDistances[tid] = FLT_MAX;
+			}
+			*/
 	}
 }
 
@@ -174,8 +180,8 @@ __global__ void initializeArrays(bool * __restrict__ d_finalizedVertices, float*
 /* DIJKSTRA GPU KERNEL #1 */
 /**************************/
 __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __restrict__ edgeArray,
-	const float * __restrict__ weightArray, bool * __restrict__ finalizedVertices, float* __restrict__ shortestDistances,
-	float * __restrict__ updatingShortestDistances, const int numVertices, const int numEdges) {
+	const float * __restrict__ weightArray, bool * __restrict__ finalizedVertices, float * __restrict__ shortestDistances,
+	float * __restrict__ updatingShortestDistances, const int numVertices, const int numEdges, int * tempIntMinArray) {
 
 	int tid = blockIdx.x*blockDim.x + threadIdx.x;
 
@@ -183,36 +189,31 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 
 		if (finalizedVertices[tid] != true) {
 
-			int edgeStart = vertexArray[tid], edgeEnd;
+			int edgeStart = tid * (numEdges / numVertices), edgeEnd; // get the edge index that we start at
 
 			// Check if we are beyond the number of verticies that we can check
-			if (tid + 1 < (numVertices)) edgeEnd = vertexArray[tid + 1]; // Rework to check the edge array
+			if (tid + 1 < (numVertices)) edgeEnd = (tid + 1) * (numEdges / numVertices); // Check if we are in bounds. 
 			else                         edgeEnd = numEdges; // We are at the max.
 
 			for (int edge = edgeStart; edge < edgeEnd; edge++) {
 				int nid = edgeArray[edge]; // get the ID which will be associated with a vertex
+				tempIntMinArray[nid] = updatingShortestDistances[nid] * floatScalar; // Assign the current value into the temp array
 				int shortWeightMin;
 				if (shortestDistances[nid] == FLT_MAX) // We need to check if the edge has been processed
 				{
-					shortWeightMin = 0;
+					shortestDistances[nid] = 0;
 				}
-				else
-				{
-					shortWeightMin = ((shortestDistances[nid] * floatScalar) + (weightArray[edge] * floatScalar));
-				}
-				int *tempMin;
-				if (nid != 0) // Ensure we don't take 0 as the distance.
-				{
-					tempMin[0] = (updatingShortestDistances[nid] * floatScalar); // set ptr to min val
-				}
-				else
-				{
-					tempMin[0] = INT_MAX;
-				}
+				
+				shortWeightMin = ((shortestDistances[nid] * floatScalar) + (weightArray[edge] * floatScalar));
 
-				atomicMin(tempMin, shortWeightMin); // assigns minimum value to uSD pointer
+				atomicMin(&tempIntMinArray[nid], shortWeightMin); // assigns minimum value to uSD pointer
 
-				updatingShortestDistances[nid] = 1;
+				__syncthreads(); // Sync before assigning updatingShortestInt version to float array.
+				if (tempIntMinArray[nid] != 0 && tid < nid)
+				{
+					shortestDistances[nid] = shortWeightMin;
+					updatingShortestDistances[nid] = (float)(tempIntMinArray[nid]) / floatScalar;
+				}
 			}
 		}
 	}
@@ -234,7 +235,7 @@ __global__  void Kernel2(const int * __restrict__ vertexArray, const int * __res
 			finalizedVertices[tid] = true;
 		}
 
-		updatingShortestDistances[tid] = 1;
+		updatingShortestDistances[tid] = shortestDistances[tid];
 	}
 }
 
@@ -257,7 +258,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, float * __restrict__ 
 	bool    *d_finalizedVertices;           cudaMalloc(&d_finalizedVertices, sizeof(bool)   * graph->numVertices);
 	float   *d_shortestDistances;           cudaMalloc(&d_shortestDistances, sizeof(float) * graph->numVertices);
 	float   *d_updatingShortestDistances;   cudaMalloc(&d_updatingShortestDistances, sizeof(float) * graph->numVertices);
-
+	int		*d_tempIntMinArray;				cudaMalloc(&d_tempIntMinArray, sizeof(int) * graph->numVertices);
 	bool *h_finalizedVertices = (bool *)malloc(sizeof(bool) * graph->numVertices);
 
 	// --- Initialize mask Ma to false, cost array Ca and Updating cost array Ua to \u221e
@@ -269,7 +270,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, float * __restrict__ 
 	// --- Read mask array from device -> host
 	cudaMemcpy(h_finalizedVertices, d_finalizedVertices, sizeof(bool) * graph->numVertices, cudaMemcpyDeviceToHost);
 
-	while (!allFinalizedVertices(h_finalizedVertices, graph->numVertices)) {
+	//while (!allFinalizedVertices(h_finalizedVertices, graph->numVertices)) {
 
 		// --- In order to improve performance, we run some number of iterations without reading the results.  This might result
 		//     in running more iterations than necessary at times, but it will in most cases be faster because we are doing less
@@ -277,7 +278,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, float * __restrict__ 
 		for (int asyncIter = 0; asyncIter < NUM_ASYNCHRONOUS_ITERATIONS; asyncIter++) {
 
 			Kernel1 << <(ceil((float)(graph->numVertices)/BLOCK_SIZE)), BLOCK_SIZE >> > (d_vertexArray, d_edgeArray, d_weightArray, d_finalizedVertices, d_shortestDistances,
-				d_updatingShortestDistances, graph->numVertices, graph->numEdges);
+				d_updatingShortestDistances, graph->numVertices, graph->numEdges, d_tempIntMinArray);
 
 			cudaDeviceSynchronize();
 			Kernel2 << <(ceil((float)(graph->numVertices) / BLOCK_SIZE)), BLOCK_SIZE >> > (d_vertexArray, d_edgeArray, d_weightArray, d_finalizedVertices, d_shortestDistances, d_updatingShortestDistances,
@@ -286,7 +287,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, float * __restrict__ 
 		}
 
 		cudaMemcpy(h_finalizedVertices, d_finalizedVertices, sizeof(bool) * graph->numVertices, cudaMemcpyDeviceToHost);
-	}
+	//}
 
 	// --- Copy the result to host
 	cudaMemcpy(h_shortestDistances, d_shortestDistances, sizeof(float) * graph->numVertices, cudaMemcpyDeviceToHost);
