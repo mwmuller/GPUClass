@@ -12,7 +12,7 @@
 
 #define BLOCK_SIZE 16
 
-#define floatScalar 10000
+#define floatScalar 1000
 
 
 // --- The graph data structure is an adjacency list.
@@ -64,6 +64,7 @@ void generateRandomGraph(GraphData *graph, int numVertices, int neighborsPerVert
 			}
 			graph->edgeArray[k * neighborsPerVertex + l] = temp;
 			graph->weightArray[k * neighborsPerVertex + l] = (float)(rand() % 1000) / 1000.0f;
+			//graph->weightArray[k * neighborsPerVertex + l] = .5;
 		}
 	}
 }
@@ -154,25 +155,19 @@ __global__ void initializeArrays(bool * __restrict__ d_finalizedVertices, float*
 
 	if (tid < numVertices) {
 
-		d_finalizedVertices[tid] = false;
-		d_shortestDistances[tid] = FLT_MAX;
-		d_updatingShortestDistances[tid] = FLT_MAX;
+		if (sourceVertex == tid) {
 
-		/*
-			if (sourceVertex == tid) {
+			d_finalizedVertices[tid] = true;
+			d_shortestDistances[tid] = 0.f;
+			d_updatingShortestDistances[tid] = 0.f;
+		}
 
-				d_finalizedVertices[tid] = true;
-				d_shortestDistances[tid] = 0.f;
-				d_updatingShortestDistances[tid] = 0.f;
-			}
+		else {
 
-			else {
-
-				d_finalizedVertices[tid] = false;
-				d_shortestDistances[tid] = FLT_MAX;
-				d_updatingShortestDistances[tid] = FLT_MAX;
-			}
-			*/
+			d_finalizedVertices[tid] = false;
+			d_shortestDistances[tid] = FLT_MAX;
+			d_updatingShortestDistances[tid] = FLT_MAX;
+		}
 	}
 }
 
@@ -187,33 +182,29 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 
 	if (tid < numVertices) {
 
-		if (finalizedVertices[tid] != true) {
+		if (finalizedVertices[tid] == true) {
+		
+			finalizedVertices[tid] = false;
 
-			int edgeStart = tid * (numEdges / numVertices), edgeEnd; // get the edge index that we start at
+			int edgeStart = vertexArray[tid], edgeEnd; // get the edge index that we start at
 
 			// Check if we are beyond the number of verticies that we can check
-			if (tid + 1 < (numVertices)) edgeEnd = (tid + 1) * (numEdges / numVertices); // Check if we are in bounds. 
+			if (tid + 1 < (numVertices)) edgeEnd = vertexArray[tid + 1]; // Check if we are in bounds. 
 			else                         edgeEnd = numEdges; // We are at the max.
 
 			for (int edge = edgeStart; edge < edgeEnd; edge++) {
 				int nid = edgeArray[edge]; // get the ID which will be associated with a vertex
-				tempIntMinArray[nid] = updatingShortestDistances[nid] * floatScalar; // Assign the current value into the temp array
+				tempIntMinArray[nid] = floor(updatingShortestDistances[nid] * floatScalar); // Assign the current value into the temp array
+
 				int shortWeightMin;
-				if (shortestDistances[nid] == FLT_MAX) // We need to check if the edge has been processed
-				{
-					shortestDistances[nid] = 0;
-				}
 				
-				shortWeightMin = ((shortestDistances[nid] * floatScalar) + (weightArray[edge] * floatScalar));
+				shortWeightMin = (shortestDistances[tid] * floatScalar) + (weightArray[edge] * floatScalar); // convert to int for atomicmin
 
 				atomicMin(&tempIntMinArray[nid], shortWeightMin); // assigns minimum value to uSD pointer
 
 				__syncthreads(); // Sync before assigning updatingShortestInt version to float array.
-				if (tempIntMinArray[nid] != 0 && tid < nid)
-				{
-					shortestDistances[nid] = shortWeightMin;
+
 					updatingShortestDistances[nid] = (float)(tempIntMinArray[nid]) / floatScalar;
-				}
 			}
 		}
 	}
@@ -284,10 +275,10 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, float * __restrict__ 
 			Kernel2 << <(ceil((float)(graph->numVertices) / BLOCK_SIZE)), BLOCK_SIZE >> > (d_vertexArray, d_edgeArray, d_weightArray, d_finalizedVertices, d_shortestDistances, d_updatingShortestDistances,
 				graph->numVertices);
 			cudaDeviceSynchronize();
-		}
+		//}
 
 		cudaMemcpy(h_finalizedVertices, d_finalizedVertices, sizeof(bool) * graph->numVertices, cudaMemcpyDeviceToHost);
-	//}
+	}
 
 	// --- Copy the result to host
 	cudaMemcpy(h_shortestDistances, d_shortestDistances, sizeof(float) * graph->numVertices, cudaMemcpyDeviceToHost);
@@ -308,10 +299,10 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, float * __restrict__ 
 int main() {
 
 	// --- Number of graph vertices
-	int numVertices = 8;
+	int numVertices = 15000;
 
 	// --- Number of edges per graph vertex
-	int neighborsPerVertex = 6;
+	int neighborsPerVertex = 8;
 
 	// --- Source vertex
 	int sourceVertex = 0;
@@ -325,22 +316,24 @@ int main() {
 	float *weightMatrix = (float *)malloc(numVertices * numVertices * sizeof(float));
 	for (int k = 0; k < numVertices * numVertices; k++) weightMatrix[k] = FLT_MAX;
 
-	// --- Displaying the adjacency list and constructing the adjacency matrix
+		// --- Displaying the adjacency list and constructing the adjacency matrix
 	printf("Adjacency list\n");
 	for (int k = 0; k < numVertices; k++) weightMatrix[k * numVertices + k] = 0.f;
-	for (int k = 0; k < numVertices; k++)
+	for (int k = 0; k < numVertices; k++) {
 		for (int l = 0; l < neighborsPerVertex; l++) {
 			weightMatrix[k * numVertices + graph.edgeArray[graph.vertexArray[k] + l]] = graph.weightArray[graph.vertexArray[k] + l];
-			printf("Vertex nr. %i; Edge nr. %i; Weight = %f\n", k, graph.edgeArray[graph.vertexArray[k] + l],
-				graph.weightArray[graph.vertexArray[k] + l]);
+			//printf("Vertex nr. %i; Edge nr. %i; Weight = %f\n", k, graph.edgeArray[graph.vertexArray[k] + l],
+				//graph.weightArray[graph.vertexArray[k] + l]);
 		}
-
-	for (int k = 0; k < numVertices * neighborsPerVertex; k++)
-		printf("%i %i %f\n", k, graph.edgeArray[k], graph.weightArray[k]);
-	
-	// --- Displaying the adjacency matrix
-	if (numVertices < 100)
+	}
+	if (numVertices < 50)
 	{
+		for (int k = 0; k < numVertices * neighborsPerVertex; k++)
+			printf("%i %i %f\n", k, graph.edgeArray[k], graph.weightArray[k]);
+	}
+	
+	/*
+		// --- Displaying the adjacency matrix
 		printf("\nAdjacency matrix\n");
 		for (int k = 0; k < numVertices; k++) {
 			for (int l = 0; l < numVertices; l++)
@@ -355,19 +348,63 @@ int main() {
 	{
 		// do nothing because we don't have that kind of time
 	}
+	*/
 	// --- Running Dijkstra on the CPU
 	float *h_shortestDistancesCPU = (float *)malloc(numVertices * sizeof(float));
 	dijkstraCPU(weightMatrix, h_shortestDistancesCPU, sourceVertex, numVertices);
 
 	printf("\nCPU results\n");
-	for (int k = 0; k < numVertices; k++) printf("From vertex %i to vertex %i = %f\n", sourceVertex, k, h_shortestDistancesCPU[k]);
+	for (int k = 0; k < numVertices; k++)
+	{
+		if (h_shortestDistancesCPU[k] != FLT_MAX)
+		{
+			//printf("From vertex %i to vertex %i = %f\n", sourceVertex, k, h_shortestDistancesCPU[k]);
+		}
+		else
+		{
+			//printf("From vertex %i to vertex %i = NO PATH\n", sourceVertex, k);
+		}
+	}
 
 	// --- Allocate space for the h_shortestDistancesGPU
 	float *h_shortestDistancesGPU = (float*)malloc(sizeof(float) * graph.numVertices);
 	dijkstraGPU(&graph, sourceVertex, h_shortestDistancesGPU);
 
 	printf("\nGPU results\n");
-	for (int k = 0; k < numVertices; k++) printf("From vertex %i to vertex %i = %f\n", sourceVertex, k, h_shortestDistancesGPU[k]);
+	for (int k = 0; k < numVertices; k++)
+	{
+		if (h_shortestDistancesGPU[k] != FLT_MAX)
+		{
+			//printf("From vertex %i to vertex %i = %f\n", sourceVertex, k, h_shortestDistancesGPU[k]);
+		}
+		else
+		{
+			//printf("From vertex %i to vertex %i = NO PATH\n", sourceVertex, k);
+		}
+	}
+	bool matching = true;
+	unsigned int wrong = 0;
+	for (int k = 0; k < numVertices; k++)
+	{
+		int getitCPU = ceil((float)(h_shortestDistancesCPU[k] * floatScalar) + .5);
+		int getitGPU = ceil((float)(h_shortestDistancesGPU[k] * floatScalar) + .5);
+		if (getitCPU > (getitGPU + 1) || getitCPU < (getitGPU - 1))
+		{
+			printf("vertex mismatch = %d| CPU val = %f | GPU val = %f\n", k, h_shortestDistancesCPU[k], h_shortestDistancesGPU[k]);
+			wrong++;
+			matching = false;
+		}
+	}
+
+	if (matching)
+	{
+		printf("CPU and GPU Cost arrays are matching!");
+	}
+	else
+	{
+		printf("CPU and GPU Cost arrays DO NOT match\n");
+		printf("%d mismatches." , wrong);
+	}
 
 	free(h_shortestDistancesCPU);
 	free(h_shortestDistancesGPU);
