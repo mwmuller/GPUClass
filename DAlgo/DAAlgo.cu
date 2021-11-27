@@ -308,7 +308,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 int main() {
 
 	// --- Number of graph vertices
-	int numVertices = 25000;
+	int numVertices = 1000000;
 
 	// --- Number of edges per graph vertex
 	int neighborsPerVertex = 8;
@@ -319,10 +319,13 @@ int main() {
 	// --- Allocate memory for arrays
 	GraphData graph;
 	generateRandomGraph(&graph, numVertices, neighborsPerVertex);
-
+	unsigned int *weightMatrix;
+	unsigned int *h_shortestDistancesCPU = (unsigned int *)malloc(numVertices * sizeof(unsigned int));
 	// --- From adjacency list to adjacency matrix.
 	//     Initializing the adjacency matrix
-		unsigned int *weightMatrix = (unsigned int *)malloc(numVertices * numVertices * sizeof(unsigned int));
+	if (numVertices < 31000)
+	{
+		weightMatrix = (unsigned int *)malloc(numVertices * numVertices * sizeof(unsigned int));
 		for (int k = 0; k < numVertices * numVertices; k++) weightMatrix[k] = INT_MAX;
 
 		// --- Displaying the adjacency list and constructing the adjacency matrix
@@ -356,13 +359,16 @@ int main() {
 			// do nothing because we don't have that kind of time
 		}
 
+	}
 		// --- Running Dijkstra on the CPU
-		unsigned int *h_shortestDistancesCPU = (unsigned int *)malloc(numVertices * sizeof(unsigned int));
+	if (numVertices < 31000)
+	{
+		h_shortestDistancesCPU = (unsigned int *)malloc(numVertices * sizeof(unsigned int));
 		clock_t cpu_startTime, cpu_endTime;
 
 		double cpu_ElapseTime = 0;
 		cpu_startTime = clock();
-		dijkstraCPU(weightMatrix, h_shortestDistancesCPU, sourceVertex, numVertices);
+		//dijkstraCPU(weightMatrix, h_shortestDistancesCPU, sourceVertex, numVertices);
 
 		cpu_endTime = clock();
 
@@ -383,6 +389,7 @@ int main() {
 				}
 			}
 		}
+	}
 	// --- Allocate space for the h_shortestDistancesGPU
 	unsigned int *h_shortestDistancesGPU = (unsigned int*)malloc(sizeof(unsigned int) * graph.numVertices);
 	dijkstraGPU(&graph, sourceVertex, h_shortestDistancesGPU);
