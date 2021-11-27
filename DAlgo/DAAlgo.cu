@@ -9,7 +9,7 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-#define NUM_ASYNCHRONOUS_ITERATIONS 10  // Number of async loop iterations before attempting to read results back
+#define NUM_ASYNCHRONOUS_ITERATIONS 23  // Number of async loop iterations before attempting to read results back
 
 #define BLOCK_SIZE 256
 
@@ -134,7 +134,7 @@ bool allFinalizedVertices(bool *finalizedVertices, int numVertices) {
 	{
 		if (finalizedVertices[i] == false)
 		{
-			printf("Index that is false: %d", i);
+			//printf("Index that is false: %d", i);
 			return false;
 		}
 	}
@@ -184,28 +184,20 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 	if (tid < numVertices) {
 		s_shortest[tx] = shortestDistances[tid];
 		s_weighted[tx] = weightArray[tid];
-		s_vertexArr[tx] = vertexArray[tid];
-		if (tx == BLOCK_SIZE - 1)
-		{
-			s_vertexArr[BLOCK_SIZE] = vertexArray[tid + 1];
-		}
 
-		__syncthreads();
+		//__syncthreads();
 		if (finalizedVertices[tid] == true) {
 		
 			finalizedVertices[tid] = false;
 
-			int edgeStart = s_vertexArr[tx], edgeEnd; // get the edge index that we start at
+			int edgeStart = vertexArray[tid], edgeEnd; // get the edge index that we start at
 
 			// Check if we are beyond the number of verticies that we can check
-			if (tid + 1 < (numVertices)) edgeEnd = s_vertexArr[tx + 1]; // Check if we are in bounds. 
+			if (tid + 1 < (numVertices)) edgeEnd = vertexArray[tid + 1]; // Check if we are in bounds. 
 			else                         edgeEnd = numEdges; // We are at the max.
 
 			for (int edge = edgeStart; edge < edgeEnd; edge++) {
 				int nid = edgeArray[edge]; // get the ID which will be associated with a vertex
-				
-				__syncthreads();
-
 				atomicMin(&updatingShortestDistances[nid], shortestDistances[tid] + weightArray[edge]); // assigns minimum value to uSD pointer
 			}
 		}
@@ -220,25 +212,15 @@ __global__  void Kernel2(const int * __restrict__ vertexArray, const int * __res
 	const int numVertices) {
 	int tx = threadIdx.x;
 	int tid = blockIdx.x * blockDim.x + tx;
-	__shared__ unsigned int s_shortest[BLOCK_SIZE];
-	__shared__ unsigned int s_updating[BLOCK_SIZE];
-
 
 	if (tid < numVertices) {
-		s_shortest[tx] = shortestDistances[tid];
-		s_updating[tx] = updatingShortestDistances[tid];
-		__syncthreads();
 
 		if (shortestDistances[tid] > updatingShortestDistances[tid]) {
 			shortestDistances[tid] = updatingShortestDistances[tid];
-			finalizedVertices[tid] = false;
-		}
-		else
-		{
 			finalizedVertices[tid] = true;
 		}
 
-		__syncthreads();
+		//__syncthreads();
 		updatingShortestDistances[tid] = shortestDistances[tid];
 	}
 }
@@ -248,6 +230,13 @@ __global__  void Kernel2(const int * __restrict__ vertexArray, const int * __res
 /************************/
 void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __restrict__ h_shortestDistances) {
 
+	float elapsed = 0;
+	cudaEvent_t start, stop;
+
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+
+	cudaEventRecord(start, 0);
 	// --- Create device-side adjacency-list, namely, vertex array Va, edge array Ea and weight array Wa from G(V,E,W)
 	int     *d_vertexArray;         cudaMalloc(&d_vertexArray, sizeof(int)   * graph->numVertices);
 	int     *d_edgeArray;           cudaMalloc(&d_edgeArray, sizeof(int)   * graph->numEdges);
@@ -275,7 +264,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 	// --- Read mask array from device -> host
 	cudaMemcpy(h_finalizedVertices, d_finalizedVertices, sizeof(bool) * graph->numVertices, cudaMemcpyDeviceToHost);
 
-	while (!allFinalizedVertices(h_finalizedVertices, graph->numVertices)) {
+	//while (!allFinalizedVertices(h_finalizedVertices, graph->numVertices)) {
 
 		// --- In order to improve performance, we run some number of iterations without reading the results.  This might result
 		//     in running more iterations than necessary at times, but it will in most cases be faster because we are doing less
@@ -291,11 +280,18 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 			cudaDeviceSynchronize();
 		}
 		cudaMemcpy(h_finalizedVertices, d_finalizedVertices, sizeof(bool) * graph->numVertices, cudaMemcpyDeviceToHost);
-	}
+	//}
 
 	// --- Copy the result to host
 	cudaMemcpy(h_shortestDistances, d_shortestDistances, sizeof(int) * graph->numVertices, cudaMemcpyDeviceToHost);	
 
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+
+	cudaEventElapsedTime(&elapsed, start, stop);
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+	printf("The elapsed time in gpu was %.2f ms\n", elapsed);
 	free(h_finalizedVertices);
 
 	cudaFree(d_vertexArray);
@@ -312,7 +308,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 int main() {
 
 	// --- Number of graph vertices
-	int numVertices = 15000;
+	int numVertices = 25000;
 
 	// --- Number of edges per graph vertex
 	int neighborsPerVertex = 8;
@@ -326,92 +322,70 @@ int main() {
 
 	// --- From adjacency list to adjacency matrix.
 	//     Initializing the adjacency matrix
-	unsigned int *weightMatrix = (unsigned int *)malloc(numVertices * numVertices * sizeof(unsigned int));
-	for (int k = 0; k < numVertices * numVertices; k++) weightMatrix[k] = INT_MAX;
+		unsigned int *weightMatrix = (unsigned int *)malloc(numVertices * numVertices * sizeof(unsigned int));
+		for (int k = 0; k < numVertices * numVertices; k++) weightMatrix[k] = INT_MAX;
 
 		// --- Displaying the adjacency list and constructing the adjacency matrix
-	printf("Adjacency list\n");
-	for (int k = 0; k < numVertices; k++) weightMatrix[k * numVertices + k] = 0;
-	for (int k = 0; k < numVertices; k++) {
-		for (int l = 0; l < neighborsPerVertex; l++) {
-			weightMatrix[k * numVertices + graph.edgeArray[graph.vertexArray[k] + l]] = graph.weightArray[graph.vertexArray[k] + l];
-			if (numVertices < 100)
-			{
-				printf("Vertex nr. %i; Edge nr. %i; Weight = %d\n", k, graph.edgeArray[graph.vertexArray[k] + l],
-					graph.weightArray[graph.vertexArray[k] + l]);
-			}
-		}
-	}
-	if (numVertices < 50)
-	{
-		//for (int k = 0; k < numVertices * neighborsPerVertex; k++)
-			//printf("%i %i %f\n", k, graph.edgeArray[k], graph.weightArray[k]);
-	}
-	
-	if(numVertices < 10)
-	{
-		// --- Displaying the adjacency matrix
-		printf("\nAdjacency matrix\n");
+		printf("Adjacency list\n");
+		for (int k = 0; k < numVertices; k++) weightMatrix[k * numVertices + k] = 0;
 		for (int k = 0; k < numVertices; k++) {
-			for (int l = 0; l < numVertices; l++)
-				if (weightMatrix[k * numVertices + l] < INT_MAX)
-					printf("%d\t", weightMatrix[k * numVertices + l]);
-				else
-					printf("--\t");
-			printf("\n");
+			for (int l = 0; l < neighborsPerVertex; l++) {
+				weightMatrix[k * numVertices + graph.edgeArray[graph.vertexArray[k] + l]] = graph.weightArray[graph.vertexArray[k] + l];
+				if (numVertices < 100)
+				{
+					printf("Vertex nr. %i; Edge nr. %i; Weight = %d\n", k, graph.edgeArray[graph.vertexArray[k] + l],
+						graph.weightArray[graph.vertexArray[k] + l]);
+				}
+			}
 		}
-	}
-	else
-	{
-		// do nothing because we don't have that kind of time
-	}
-	
-	// --- Running Dijkstra on the CPU
-	unsigned int *h_shortestDistancesCPU = (unsigned int *)malloc(numVertices * sizeof(unsigned int));
-	clock_t cpu_startTime, cpu_endTime;
-
-	double cpu_ElapseTime = 0;
-	cpu_startTime = clock();
-	dijkstraCPU(weightMatrix, h_shortestDistancesCPU, sourceVertex, numVertices);
-
-	cpu_endTime = clock();
-
-	cpu_ElapseTime = ((cpu_endTime - cpu_startTime) / CLOCKS_PER_SEC);
-	printf("CPU computation time: %.5f ms\n", cpu_ElapseTime);
-	printf("\nCPU results\n");
-	if (numVertices < 100)
-	{
-		for (int k = 0; k < numVertices; k++)
+		if (numVertices < 10)
 		{
-			if (h_shortestDistancesCPU[k] != INT_MAX)
-			{
-				printf("From vertex %i to vertex %i = %d\n", sourceVertex, k, h_shortestDistancesCPU[k]);
-			}
-			else
-			{
-				printf("From vertex %i to vertex %i = NO PATH\n", sourceVertex, k);
+			// --- Displaying the adjacency matrix
+			printf("\nAdjacency matrix\n");
+			for (int k = 0; k < numVertices; k++) {
+				for (int l = 0; l < numVertices; l++)
+					if (weightMatrix[k * numVertices + l] < INT_MAX)
+						printf("%d\t", weightMatrix[k * numVertices + l]);
+					else
+						printf("--\t");
+				printf("\n");
 			}
 		}
-	}
+		else
+		{
+			// do nothing because we don't have that kind of time
+		}
 
+		// --- Running Dijkstra on the CPU
+		unsigned int *h_shortestDistancesCPU = (unsigned int *)malloc(numVertices * sizeof(unsigned int));
+		clock_t cpu_startTime, cpu_endTime;
+
+		double cpu_ElapseTime = 0;
+		cpu_startTime = clock();
+		dijkstraCPU(weightMatrix, h_shortestDistancesCPU, sourceVertex, numVertices);
+
+		cpu_endTime = clock();
+
+		cpu_ElapseTime = ((cpu_endTime - cpu_startTime) / CLOCKS_PER_SEC);
+		printf("CPU computation time: %.2f ms\n", cpu_ElapseTime);
+		printf("\nCPU results\n");
+		if (numVertices < 100)
+		{
+			for (int k = 0; k < numVertices; k++)
+			{
+				if (h_shortestDistancesCPU[k] != INT_MAX)
+				{
+					printf("From vertex %i to vertex %i = %d\n", sourceVertex, k, h_shortestDistancesCPU[k]);
+				}
+				else
+				{
+					printf("From vertex %i to vertex %i = NO PATH\n", sourceVertex, k);
+				}
+			}
+		}
 	// --- Allocate space for the h_shortestDistancesGPU
 	unsigned int *h_shortestDistancesGPU = (unsigned int*)malloc(sizeof(unsigned int) * graph.numVertices);
-	float elapsed = 0;
-	cudaEvent_t start, stop;
-
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
-
-	cudaEventRecord(start, 0);
 	dijkstraGPU(&graph, sourceVertex, h_shortestDistancesGPU);
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
-
-	cudaEventElapsedTime(&elapsed, start, stop);
-
-	cudaEventDestroy(start);
-	cudaEventDestroy(stop);
-	printf("The elapsed time in gpu was %.2f ms\n", elapsed);
 	if (numVertices < 100)
 	{
 		printf("\nGPU results\n");
