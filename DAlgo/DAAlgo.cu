@@ -9,7 +9,7 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-#define NUM_ASYNCHRONOUS_ITERATIONS 25  // Number of async loop iterations before attempting to read results back
+#define NUM_ASYNCHRONOUS_ITERATIONS 10  // Number of async loop iterations before attempting to read results back
 
 #define BLOCK_SIZE 256
 
@@ -134,7 +134,7 @@ bool allFinalizedVertices(bool *finalizedVertices, int numVertices) {
 	{
 		if (finalizedVertices[i] == false)
 		{
-			printf("Index that is true: %d", i);
+			printf("Index that is false: %d", i);
 			return false;
 		}
 	}
@@ -195,10 +195,10 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 		
 			finalizedVertices[tid] = false;
 
-			int edgeStart = s_vertexArr[tid], edgeEnd; // get the edge index that we start at
+			int edgeStart = s_vertexArr[tx], edgeEnd; // get the edge index that we start at
 
 			// Check if we are beyond the number of verticies that we can check
-			if (tid + 1 < (numVertices)) edgeEnd = s_vertexArr[tid + 1]; // Check if we are in bounds. 
+			if (tid + 1 < (numVertices)) edgeEnd = s_vertexArr[tx + 1]; // Check if we are in bounds. 
 			else                         edgeEnd = numEdges; // We are at the max.
 
 			for (int edge = edgeStart; edge < edgeEnd; edge++) {
@@ -206,7 +206,7 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 				
 				__syncthreads();
 
-				atomicMin(&updatingShortestDistances[nid], s_shortest[tid] + s_weighted[edge]); // assigns minimum value to uSD pointer
+				atomicMin(&updatingShortestDistances[nid], shortestDistances[tid] + weightArray[edge]); // assigns minimum value to uSD pointer
 			}
 		}
 	}
@@ -218,16 +218,27 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 __global__  void Kernel2(const int * __restrict__ vertexArray, const int * __restrict__ edgeArray, const unsigned int* __restrict__ weightArray,
 	bool * __restrict__ finalizedVertices, unsigned int* __restrict__ shortestDistances, unsigned int* __restrict__ updatingShortestDistances,
 	const int numVertices) {
+	int tx = threadIdx.x;
+	int tid = blockIdx.x * blockDim.x + tx;
+	__shared__ unsigned int s_shortest[BLOCK_SIZE];
+	__shared__ unsigned int s_updating[BLOCK_SIZE];
 
-	int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (tid < numVertices) {
+		s_shortest[tx] = shortestDistances[tid];
+		s_updating[tx] = updatingShortestDistances[tid];
+		__syncthreads();
 
 		if (shortestDistances[tid] > updatingShortestDistances[tid]) {
 			shortestDistances[tid] = updatingShortestDistances[tid];
+			finalizedVertices[tid] = false;
+		}
+		else
+		{
 			finalizedVertices[tid] = true;
 		}
 
+		__syncthreads();
 		updatingShortestDistances[tid] = shortestDistances[tid];
 	}
 }
@@ -253,13 +264,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 	unsigned int   *d_updatingShortestDistances;   cudaMalloc(&d_updatingShortestDistances, sizeof(unsigned int) * graph->numVertices);
 	bool *h_finalizedVertices = (bool *)malloc(sizeof(bool) * graph->numVertices);
 
-	float elapsed = 0;
-	cudaEvent_t start, stop;
-
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
-
-	cudaEventRecord(start, 0);
+	
 
 	// --- Initialize mask Ma to false, cost array Ca and Updating cost array Ua to \u221e
 	initializeArrays << <ceil((float)(graph->numVertices)/BLOCK_SIZE), BLOCK_SIZE >> > (d_finalizedVertices, d_shortestDistances,
@@ -270,7 +275,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 	// --- Read mask array from device -> host
 	cudaMemcpy(h_finalizedVertices, d_finalizedVertices, sizeof(bool) * graph->numVertices, cudaMemcpyDeviceToHost);
 
-	//while (!allFinalizedVertices(h_finalizedVertices, graph->numVertices)) {
+	while (!allFinalizedVertices(h_finalizedVertices, graph->numVertices)) {
 
 		// --- In order to improve performance, we run some number of iterations without reading the results.  This might result
 		//     in running more iterations than necessary at times, but it will in most cases be faster because we are doing less
@@ -285,23 +290,12 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 				graph->numVertices);
 			cudaDeviceSynchronize();
 		}
-
 		cudaMemcpy(h_finalizedVertices, d_finalizedVertices, sizeof(bool) * graph->numVertices, cudaMemcpyDeviceToHost);
-	//}
+	}
 
 	// --- Copy the result to host
-	cudaMemcpy(h_shortestDistances, d_shortestDistances, sizeof(int) * graph->numVertices, cudaMemcpyDeviceToHost);
+	cudaMemcpy(h_shortestDistances, d_shortestDistances, sizeof(int) * graph->numVertices, cudaMemcpyDeviceToHost);	
 
-
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
-
-	cudaEventElapsedTime(&elapsed, start, stop);
-
-	cudaEventDestroy(start);
-	cudaEventDestroy(stop);
-
-	printf("The elapsed time in gpu was %.2f ms\n", elapsed);
 	free(h_finalizedVertices);
 
 	cudaFree(d_vertexArray);
@@ -318,7 +312,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 int main() {
 
 	// --- Number of graph vertices
-	int numVertices = 25000;
+	int numVertices = 15000;
 
 	// --- Number of edges per graph vertex
 	int neighborsPerVertex = 8;
@@ -383,7 +377,7 @@ int main() {
 	cpu_endTime = clock();
 
 	cpu_ElapseTime = ((cpu_endTime - cpu_startTime) / CLOCKS_PER_SEC);
-	printf("CPU computation time: %.2f ms\n", cpu_ElapseTime);
+	printf("CPU computation time: %.5f ms\n", cpu_ElapseTime);
 	printf("\nCPU results\n");
 	if (numVertices < 100)
 	{
@@ -402,9 +396,22 @@ int main() {
 
 	// --- Allocate space for the h_shortestDistancesGPU
 	unsigned int *h_shortestDistancesGPU = (unsigned int*)malloc(sizeof(unsigned int) * graph.numVertices);
+	float elapsed = 0;
+	cudaEvent_t start, stop;
 
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+
+	cudaEventRecord(start, 0);
 	dijkstraGPU(&graph, sourceVertex, h_shortestDistancesGPU);
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
 
+	cudaEventElapsedTime(&elapsed, start, stop);
+
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+	printf("The elapsed time in gpu was %.2f ms\n", elapsed);
 	if (numVertices < 100)
 	{
 		printf("\nGPU results\n");
