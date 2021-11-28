@@ -9,9 +9,9 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-#define NUM_ASYNCHRONOUS_ITERATIONS 23  // Number of async loop iterations before attempting to read results back
+#define NUM_ASYNCHRONOUS_ITERATIONS 10  // Number of async loop iterations before attempting to read results back
 
-#define BLOCK_SIZE 64
+#define BLOCK_SIZE 32
 
 
 // --- The graph data structure is an adjacency list.
@@ -175,15 +175,13 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 	unsigned int * __restrict__ updatingShortestDistances, const int numVertices, const int numEdges) {
 	int tx = threadIdx.x;
 	int tid = blockIdx.x*blockDim.x + tx;
-	__shared__ unsigned int s_shortest[BLOCK_SIZE];
-	__shared__ unsigned int s_weighted[BLOCK_SIZE];
-	__shared__ unsigned int s_vertexArr[BLOCK_SIZE + 1];
+	__shared__ unsigned int s_shortest[BLOCK_SIZE]; 
 
 	if (tid < numVertices) {
-		s_shortest[tx] = shortestDistances[tid];
-		s_weighted[tx] = weightArray[tid];
+		s_shortest[tx] = shortestDistances[tid]; 
 
-		//__syncthreads();
+		__syncthreads();
+
 		if (finalizedVertices[tid] == true) {
 		
 			finalizedVertices[tid] = false;
@@ -196,7 +194,7 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 
 			for (int edge = edgeStart; edge < edgeEnd; edge++) {
 				int nid = edgeArray[edge]; // get the ID which will be associated with a vertex
-				atomicMin(&updatingShortestDistances[nid], shortestDistances[tid] + weightArray[edge]); // assigns minimum value to uSD pointer
+				atomicMin(&updatingShortestDistances[nid], s_shortest[tx] + weightArray[edge]); // assigns minimum value to uSD pointer
 			}
 		}
 	}
@@ -312,13 +310,12 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 int main() {
 
 	// --- Number of graph vertices
-	int numVertices = 30000;
-
+	int numVertices = 20000;
 	// --- Number of edges per graph vertex
-	int neighborsPerVertex = 2;
+	int neighborsPerVertex = 200;
 
 	// --- Source vertex
-	int sourceVertex = 4;
+	int sourceVertex = 0;
 
 	// --- Allocate memory for arrays
 	GraphData graph;
