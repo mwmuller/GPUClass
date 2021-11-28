@@ -11,11 +11,9 @@
 
 #define NUM_ASYNCHRONOUS_ITERATIONS 30 // Number of async loop iterations before attempting to read results back
 
-#define BLOCK_SIZE 64
-#define CHILD_BLOCK_SIZE 32
+#define BLOCK_SIZE 32
+#define CHILD_BLOCK_SIZE 16
 
-__device__ unsigned int * ref_weight;  // to be allocated in first block thread 0
-__device__ unsigned int * ref_edgeArray; // to be allocated in first block thread 0
 // --- The graph data structure is an adjacency list.
 typedef struct {
 
@@ -174,18 +172,18 @@ __global__ void initializeArrays(bool * __restrict__ d_finalizedVertices, unsign
 
 
 // This function shall pull the values from 
-__global__ void writeToShared(unsigned int * d_edgeArray, unsigned int * d_weight, const unsigned int * __restrict__ weightArray, const int * edgeArray,
+__global__ void performRelaxation(unsigned int * shortestDistances,
+	unsigned int * updatingShortestDistances, const unsigned int * weightArray, const int * edgeArray,
 	const int edgeStart, const int edgeEnd, const int numVertices)
 {
 	int tx = threadIdx.x;
-	int tid = blockIdx.x * blockDim.x + tx;
-	int neighbors = edgeEnd - edgeStart;
-	// Assign the value from the respective thread. Ensure we pay atention to the edge values. As we may be in differnt blocls.
-	// Currently this only findfs up to 8 locations
-	if (tid < numVertices)
+	int tid = blockIdx.x * blockDim.x + tx; // Equal to the edgevalue + tx
+	int neighbors = edgeEnd - edgeStart; // neighbors per vertex
+	if (tid < edgeEnd)
 	{
-		d_edgeArray[tid + edgeStart] = edgeArray[tid + edgeStart];
-		d_weight[tid + edgeStart] = weightArray[tid + edgeStart];
+		int edge = edgeStart + tid; // edgeStart = numNeighbors * vertex 
+		int nid = edgeArray[edge]; // get the ID which will be associated with a vertex
+		atomicMin(&updatingShortestDistances[nid], shortestDistances[(edgeEnd*blockIdx.x) / neighbors] + weightArray[edge]); // assigns minimum value to uSD pointer
 	}
 }
 
@@ -193,46 +191,38 @@ __global__ void writeToShared(unsigned int * d_edgeArray, unsigned int * d_weigh
 /* DIJKSTRA GPU KERNEL #1 */
 /**************************/
 __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __restrict__ edgeArray,
-	const unsigned int * __restrict__ weightArray, bool * __restrict__ finalizedVertices, unsigned int * __restrict__ shortestDistances,
-	unsigned int * __restrict__ updatingShortestDistances, const int numVertices, const int numEdges) {
+	const unsigned int * __restrict__ weightArray, bool * finalizedVertices, unsigned int * __restrict__ shortestDistances,
+	unsigned int * updatingShortestDistances, const int numVertices, const int numEdges) {
 	int tx = threadIdx.x;
 	int tid = blockIdx.x*blockDim.x + tx;
 	int neighbors = numEdges / numVertices; 
 	__shared__ unsigned int s_shortest[BLOCK_SIZE];
 
-	extern __shared__ unsigned int s_weightedEdgeArray[]; // Contains both Weights and Edge vertexes. (Weight [0...n/2 - 1] Edge [n/2...n-1])
 	// Creating temps to copy into shared memory.
 
 	if (tid < numVertices) {
 		s_shortest[tx] = shortestDistances[tid];
-		if (tid == 0) // only one thread will init the global device vars
-		{
-			ref_weight = (unsigned int *)malloc(sizeof(unsigned int) * numEdges);
-			ref_edgeArray = (unsigned int *)malloc(sizeof(unsigned int) * numEdges);
-		}
 		__syncthreads();
+
 		if (finalizedVertices[tid] == true) {
 		
 			finalizedVertices[tid] = false;
 
-			int edgeStart = vertexArray[tx], edgeEnd; // get the edge index that we start at
+			int edgeStart = vertexArray[tid], edgeEnd; // get the edge index that we start at
 
 			// Check if we are beyond the number of verticies that we can check
-			if (tx + 1 < (numVertices)) edgeEnd = vertexArray[tx + 1]; // Check if we are in bounds. 
+			if (tid + 1 < (numVertices)) edgeEnd = vertexArray[tid + 1]; // Check if we are in bounds. 
 			else                         edgeEnd = numEdges; // We are at the max.
-			
-			writeToShared << <ceil((float)(edgeEnd - edgeStart)/CHILD_BLOCK_SIZE),CHILD_BLOCK_SIZE>>> (ref_weight, ref_edgeArray, weightArray, edgeArray, edgeStart, edgeEnd, numVertices);
-			cudaDeviceSynchronize();
-			for (int i = 0; i < (edgeEnd - edgeStart); i++) // iterate through the neighbors per thread
-			{
-				s_weightedEdgeArray[tx * neighbors + i] = ref_weight[tx * neighbors + i]; // Assign the weight portion of the array
-				s_weightedEdgeArray[(tx * neighbors) + (neighbors * BLOCK_SIZE) + i] = ref_edgeArray[tx * neighbors + i];
-			}
+
 			__syncthreads();
-			for (int edge = edgeStart; edge < edgeEnd; edge++) {
-				int nid = s_weightedEdgeArray[(neighbors * BLOCK_SIZE) + edge]; // get the ID which will be associated with a vertex
-				atomicMin(&updatingShortestDistances[nid], s_shortest[tx] + s_weightedEdgeArray[edge]); // assigns minimum value to uSD pointer
-			}
+			performRelaxation << <ceil((float)((edgeEnd - edgeStart) * blockDim.x) / CHILD_BLOCK_SIZE), CHILD_BLOCK_SIZE >> > (updatingShortestDistances, shortestDistances, weightArray, edgeArray, edgeStart, edgeEnd, numVertices);
+			cudaDeviceSynchronize();
+			__syncthreads();
+
+			//for (int edge = edgeStart; edge < edgeEnd; edge++) {
+				//int nid = edgeArray[edge]; // get the ID which will be associated with a vertex
+				//atomicMin(&updatingShortestDistances[nid], s_shortest[tx] + weightArray[edge]); // assigns minimum value to uSD pointer
+			//}
 		}
 	}
 }
@@ -241,7 +231,7 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 /* DIJKSTRA GPU KERNEL #2 */
 /**************************/
 __global__  void Kernel2(const int * __restrict__ vertexArray, const int * __restrict__ edgeArray, const unsigned int* __restrict__ weightArray,
-	bool * __restrict__ finalizedVertices, unsigned int* __restrict__ shortestDistances, unsigned int* __restrict__ updatingShortestDistances,
+	bool * finalizedVertices, unsigned int* __restrict__ shortestDistances, unsigned int* updatingShortestDistances,
 	const int numVertices) {
 	int tx = threadIdx.x;
 	int tid = blockIdx.x * blockDim.x + tx;
@@ -303,7 +293,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 		//     stalling of the GPU waiting for results.
 		for (int asyncIter = 0; asyncIter < NUM_ASYNCHRONOUS_ITERATIONS; asyncIter++) {
 
-			Kernel1 << <(ceil((float)(graph->numVertices)/BLOCK_SIZE)), BLOCK_SIZE, (BLOCK_SIZE * (graph->numEdges / graph->numVertices) * 2) * sizeof(unsigned int)>> > (d_vertexArray, d_edgeArray, d_weightArray, d_finalizedVertices, d_shortestDistances,
+			Kernel1 << <(ceil((float)(graph->numVertices)/BLOCK_SIZE)), BLOCK_SIZE>> > (d_vertexArray, d_edgeArray, d_weightArray, d_finalizedVertices, d_shortestDistances,
 				d_updatingShortestDistances, graph->numVertices, graph->numEdges);
 
 			cudaDeviceSynchronize();
@@ -340,7 +330,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 int main() {
 
 	// --- Number of graph vertices
-	int numVertices = 32;
+	int numVertices = 10;
 
 	// --- Number of edges per graph vertex
 	int neighborsPerVertex = 8;
