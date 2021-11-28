@@ -11,7 +11,7 @@
 
 #define NUM_ASYNCHRONOUS_ITERATIONS 23  // Number of async loop iterations before attempting to read results back
 
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 64
 
 
 // --- The graph data structure is an adjacency list.
@@ -130,15 +130,13 @@ void dijkstraCPU(unsigned int *graph, unsigned int *h_shortestDistances, int sou
 // --- Check whether all the vertices have been finalized. This tells the algorithm whether it needs to continue running or not.
 bool allFinalizedVertices(bool *finalizedVertices, int numVertices) {
 
-	for (int i = 1; i < numVertices; i++)
+	for (int i = 0; i < numVertices; i++)
 	{
-		if (finalizedVertices[i] == false)
+		if (finalizedVertices[i] == true)
 		{
-			//printf("Index that is false: %d", i);
 			return false;
 		}
 	}
-
 
 	return true;
 }
@@ -230,6 +228,7 @@ __global__  void Kernel2(const int * __restrict__ vertexArray, const int * __res
 /************************/
 void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __restrict__ h_shortestDistances) {
 
+	//Init of GPU timing 
 	float elapsed = 0;
 	cudaEvent_t start, stop;
 
@@ -237,6 +236,8 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 	cudaEventCreate(&stop);
 
 	cudaEventRecord(start, 0);
+	// END of init/Start
+
 	// --- Create device-side adjacency-list, namely, vertex array Va, edge array Ea and weight array Wa from G(V,E,W)
 	int     *d_vertexArray;         cudaMalloc(&d_vertexArray, sizeof(int)   * graph->numVertices);
 	int     *d_edgeArray;           cudaMalloc(&d_edgeArray, sizeof(int)   * graph->numEdges);
@@ -258,13 +259,12 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 	// --- Initialize mask Ma to false, cost array Ca and Updating cost array Ua to \u221e
 	initializeArrays << <ceil((float)(graph->numVertices)/BLOCK_SIZE), BLOCK_SIZE >> > (d_finalizedVertices, d_shortestDistances,
 		d_updatingShortestDistances, sourceVertex, graph->numVertices);
-	//cudaPeekAtLastError());
 	cudaDeviceSynchronize();
 
 	// --- Read mask array from device -> host
 	cudaMemcpy(h_finalizedVertices, d_finalizedVertices, sizeof(bool) * graph->numVertices, cudaMemcpyDeviceToHost);
 
-	//while (!allFinalizedVertices(h_finalizedVertices, graph->numVertices)) {
+	while (!allFinalizedVertices(h_finalizedVertices, graph->numVertices)) {
 
 		// --- In order to improve performance, we run some number of iterations without reading the results.  This might result
 		//     in running more iterations than necessary at times, but it will in most cases be faster because we are doing less
@@ -280,11 +280,13 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 			cudaDeviceSynchronize();
 		}
 		cudaMemcpy(h_finalizedVertices, d_finalizedVertices, sizeof(bool) * graph->numVertices, cudaMemcpyDeviceToHost);
-	//}
+	}
 
 	// --- Copy the result to host
 	cudaMemcpy(h_shortestDistances, d_shortestDistances, sizeof(int) * graph->numVertices, cudaMemcpyDeviceToHost);	
 
+
+	// Results timing section
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
 
@@ -292,6 +294,8 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 	cudaEventDestroy(start);
 	cudaEventDestroy(stop);
 	printf("The elapsed time in gpu was %.2f ms\n", elapsed);
+	// END of GPU timing
+
 	free(h_finalizedVertices);
 
 	cudaFree(d_vertexArray);
@@ -308,22 +312,23 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 int main() {
 
 	// --- Number of graph vertices
-	int numVertices = 1000000;
+	int numVertices = 30000;
 
 	// --- Number of edges per graph vertex
-	int neighborsPerVertex = 8;
+	int neighborsPerVertex = 2;
 
 	// --- Source vertex
-	int sourceVertex = 0;
+	int sourceVertex = 4;
 
 	// --- Allocate memory for arrays
 	GraphData graph;
 	generateRandomGraph(&graph, numVertices, neighborsPerVertex);
+
 	unsigned int *weightMatrix;
 	unsigned int *h_shortestDistancesCPU = (unsigned int *)malloc(numVertices * sizeof(unsigned int));
 	// --- From adjacency list to adjacency matrix.
 	//     Initializing the adjacency matrix
-	if (numVertices < 31000)
+	if (numVertices < 31000) // Prevent overflow for cpu graph
 	{
 		weightMatrix = (unsigned int *)malloc(numVertices * numVertices * sizeof(unsigned int));
 		for (int k = 0; k < numVertices * numVertices; k++) weightMatrix[k] = INT_MAX;
@@ -341,42 +346,27 @@ int main() {
 				}
 			}
 		}
-		if (numVertices < 10)
-		{
-			// --- Displaying the adjacency matrix
-			printf("\nAdjacency matrix\n");
-			for (int k = 0; k < numVertices; k++) {
-				for (int l = 0; l < numVertices; l++)
-					if (weightMatrix[k * numVertices + l] < INT_MAX)
-						printf("%d\t", weightMatrix[k * numVertices + l]);
-					else
-						printf("--\t");
-				printf("\n");
-			}
-		}
-		else
-		{
-			// do nothing because we don't have that kind of time
-		}
-
-	}
 		// --- Running Dijkstra on the CPU
-	if (numVertices < 31000)
-	{
 		h_shortestDistancesCPU = (unsigned int *)malloc(numVertices * sizeof(unsigned int));
-		clock_t cpu_startTime, cpu_endTime;
 
+		// Timing CPU computation
+		clock_t cpu_startTime, cpu_endTime;
 		double cpu_ElapseTime = 0;
+
 		cpu_startTime = clock();
-		//dijkstraCPU(weightMatrix, h_shortestDistancesCPU, sourceVertex, numVertices);
+
+		dijkstraCPU(weightMatrix, h_shortestDistancesCPU, sourceVertex, numVertices);
 
 		cpu_endTime = clock();
 
 		cpu_ElapseTime = ((cpu_endTime - cpu_startTime) / CLOCKS_PER_SEC);
+
 		printf("CPU computation time: %.2f ms\n", cpu_ElapseTime);
-		printf("\nCPU results\n");
-		if (numVertices < 100)
+		// END CPU Timing
+
+		if (numVertices < 100) // too many results to be displayed
 		{
+			printf("\nCPU results\n");
 			for (int k = 0; k < numVertices; k++)
 			{
 				if (h_shortestDistancesCPU[k] != INT_MAX)
@@ -388,11 +378,11 @@ int main() {
 					printf("From vertex %i to vertex %i = NO PATH\n", sourceVertex, k);
 				}
 			}
-		}
+		}	
 	}
 	// --- Allocate space for the h_shortestDistancesGPU
 	unsigned int *h_shortestDistancesGPU = (unsigned int*)malloc(sizeof(unsigned int) * graph.numVertices);
-	dijkstraGPU(&graph, sourceVertex, h_shortestDistancesGPU);
+	dijkstraGPU(&graph, sourceVertex, h_shortestDistancesGPU); // contains timer
 	if (numVertices < 100)
 	{
 		printf("\nGPU results\n");
@@ -408,6 +398,8 @@ int main() {
 			}
 		}
 	}
+
+	// Mismatch checking
 	bool matching = true;
 	unsigned int wrong = 0;
 	for (int k = 0; k < numVertices; k++)
@@ -424,10 +416,14 @@ int main() {
 	{
 		printf("CPU and GPU Cost arrays are matching!");
 	}
-	else
+	else if(!matching && numVertices < 31000)
 	{
 		printf("CPU and GPU Cost arrays DO NOT match\n");
 		printf("%d mismatches." , wrong);
+	}
+	else
+	{
+		printf("CPU code could not be run.");
 	}
 
 	free(h_shortestDistancesCPU);
