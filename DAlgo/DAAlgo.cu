@@ -9,7 +9,7 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-#define NUM_ASYNCHRONOUS_ITERATIONS 23  // Number of async loop iterations before attempting to read results back
+#define NUM_ASYNCHRONOUS_ITERATIONS 30 // Number of async loop iterations before attempting to read results back
 
 #define BLOCK_SIZE 256
 
@@ -91,9 +91,10 @@ void dijkstraCPU(unsigned int *graph, unsigned int *h_shortestDistances, int sou
 	// --- h_finalizedVertices[i] is true if vertex i is included in the shortest path tree
 	//     or the shortest distance from the source node to i is finalized
 	bool *h_finalizedVertices = (bool *)malloc(N * sizeof(bool));
+	unsigned int *h_updatingDistances = (unsigned int *)malloc(N * sizeof(unsigned int));
 
 	// --- Initialize h_shortestDistancesances as infinite and h_shortestDistances as false
-	for (int i = 0; i < N; i++) h_shortestDistances[i] = INT_MAX, h_finalizedVertices[i] = false;
+	for (int i = 0; i < N; i++) h_shortestDistances[i] = INT_MAX, h_finalizedVertices[i] = false, h_updatingDistances[i] = INT_MAX;
 
 	// --- h_shortestDistancesance of the source vertex from itself is always 0
 	h_shortestDistances[sourceVertex] = 0;
@@ -108,7 +109,7 @@ void dijkstraCPU(unsigned int *graph, unsigned int *h_shortestDistances, int sou
 		// --- Mark the current vertex as processed
 		h_finalizedVertices[currentVertex] = true;
 
-		// --- Relaxation loop
+		// --- Relaxation loop through the neighbors
 		for (int v = 0; v < N; v++) {
 
 			// --- Update dist[v] only if it is not in h_finalizedVertices, there is an edge
@@ -120,6 +121,7 @@ void dijkstraCPU(unsigned int *graph, unsigned int *h_shortestDistances, int sou
 				h_shortestDistances[currentVertex] + graph[currentVertex * N + v] < h_shortestDistances[v])
 
 				h_shortestDistances[v] = h_shortestDistances[currentVertex] + graph[currentVertex * N + v];
+
 		}
 	}
 }
@@ -129,17 +131,16 @@ void dijkstraCPU(unsigned int *graph, unsigned int *h_shortestDistances, int sou
 /***************************/
 // --- Check whether all the vertices have been finalized. This tells the algorithm whether it needs to continue running or not.
 bool allFinalizedVertices(bool *finalizedVertices, int numVertices) {
-
-	for (int i = 1; i < numVertices; i++)
+	
+	for (int i = 0; i < numVertices; i++)
 	{
-		if (finalizedVertices[i] == false)
+		if (finalizedVertices[i] == true)
 		{
 			//printf("Index that is false: %d", i);
 			return false;
 		}
 	}
-
-
+	
 	return true;
 }
 
@@ -169,6 +170,30 @@ __global__ void initializeArrays(bool * __restrict__ d_finalizedVertices, unsign
 	}
 }
 
+__global__ void populateSharedArrays(unsigned int s_weighted[], unsigned int* s_updating, unsigned int* s_edgeArray,
+	unsigned int * __restrict__ shortestDistances, unsigned int * __restrict__ updatingShortestDistances, const int* __restrict__ edgeArray,
+	const unsigned int * __restrict__ weightArray, const int edgeStart, const int edgeEnd, bool readBack)
+{
+	int tx = threadIdx.x; // Each thread is associated with a neighbor
+	int edge = tx + edgeStart;
+	int nid = s_edgeArray[edge]; // get the ID which will be associated with a vertex
+	if (edge < edgeEnd)
+	{
+		if (readBack == false) // read in values
+		{
+			s_weighted[edge] = weightArray[edge]; // Move from start up based on tx
+			s_edgeArray[edge] = edgeArray[edge];
+
+			s_updating[edge] = updatingShortestDistances[nid];
+
+		}
+		else // write back
+		{
+			updatingShortestDistances[nid] = s_updating[edge];
+		}
+	}
+}
+
 /**************************/
 /* DIJKSTRA GPU KERNEL #1 */
 /**************************/
@@ -179,13 +204,13 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 	int tid = blockIdx.x*blockDim.x + tx;
 	__shared__ unsigned int s_shortest[BLOCK_SIZE];
 	__shared__ unsigned int s_weighted[BLOCK_SIZE];
-	__shared__ unsigned int s_vertexArr[BLOCK_SIZE + 1];
+	__shared__ unsigned int s_updating[BLOCK_SIZE];
+	__shared__ unsigned int s_edgeArray[BLOCK_SIZE * 8];
 
 	if (tid < numVertices) {
 		s_shortest[tx] = shortestDistances[tid];
-		s_weighted[tx] = weightArray[tid];
 
-		//__syncthreads();
+		__syncthreads();
 		if (finalizedVertices[tid] == true) {
 		
 			finalizedVertices[tid] = false;
@@ -196,10 +221,17 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 			if (tid + 1 < (numVertices)) edgeEnd = vertexArray[tid + 1]; // Check if we are in bounds. 
 			else                         edgeEnd = numEdges; // We are at the max.
 
+			populateSharedArrays << <1, numEdges / numVertices >> > (s_weighted, s_updating, s_edgeArray, 
+																	 shortestDistances, updatingShortestDistances, edgeArray, weightArray,
+																     edgeStart, edgeEnd, false);
+			__syncthreads();
 			for (int edge = edgeStart; edge < edgeEnd; edge++) {
-				int nid = edgeArray[edge]; // get the ID which will be associated with a vertex
-				atomicMin(&updatingShortestDistances[nid], shortestDistances[tid] + weightArray[edge]); // assigns minimum value to uSD pointer
+				int nid = s_edgeArray[edge]; // get the ID which will be associated with a vertex
+				atomicMin(&s_updating[nid], s_shortest[tx] + s_weighted[edge]); // assigns minimum value to uSD pointer
 			}
+			populateSharedArrays << <1, numEdges / numVertices >> > (s_weighted, s_updating, s_edgeArray,
+				shortestDistances, &updatingShortestDistances, &edgeArray, &weightArray,
+				edgeStart, edgeEnd, true); // read values back
 		}
 	}
 }
@@ -220,7 +252,6 @@ __global__  void Kernel2(const int * __restrict__ vertexArray, const int * __res
 			finalizedVertices[tid] = true;
 		}
 
-		//__syncthreads();
 		updatingShortestDistances[tid] = shortestDistances[tid];
 	}
 }
@@ -264,7 +295,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 	// --- Read mask array from device -> host
 	cudaMemcpy(h_finalizedVertices, d_finalizedVertices, sizeof(bool) * graph->numVertices, cudaMemcpyDeviceToHost);
 
-	//while (!allFinalizedVertices(h_finalizedVertices, graph->numVertices)) {
+	while (!allFinalizedVertices(h_finalizedVertices, graph->numVertices)) {
 
 		// --- In order to improve performance, we run some number of iterations without reading the results.  This might result
 		//     in running more iterations than necessary at times, but it will in most cases be faster because we are doing less
@@ -280,7 +311,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 			cudaDeviceSynchronize();
 		}
 		cudaMemcpy(h_finalizedVertices, d_finalizedVertices, sizeof(bool) * graph->numVertices, cudaMemcpyDeviceToHost);
-	//}
+	}
 
 	// --- Copy the result to host
 	cudaMemcpy(h_shortestDistances, d_shortestDistances, sizeof(int) * graph->numVertices, cudaMemcpyDeviceToHost);	
@@ -308,10 +339,10 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 int main() {
 
 	// --- Number of graph vertices
-	int numVertices = 1000000;
+	int numVertices = 20000;
 
 	// --- Number of edges per graph vertex
-	int neighborsPerVertex = 8;
+	int neighborsPerVertex = 30;
 
 	// --- Source vertex
 	int sourceVertex = 0;
@@ -341,34 +372,13 @@ int main() {
 				}
 			}
 		}
-		if (numVertices < 10)
-		{
-			// --- Displaying the adjacency matrix
-			printf("\nAdjacency matrix\n");
-			for (int k = 0; k < numVertices; k++) {
-				for (int l = 0; l < numVertices; l++)
-					if (weightMatrix[k * numVertices + l] < INT_MAX)
-						printf("%d\t", weightMatrix[k * numVertices + l]);
-					else
-						printf("--\t");
-				printf("\n");
-			}
-		}
-		else
-		{
-			// do nothing because we don't have that kind of time
-		}
 
-	}
 		// --- Running Dijkstra on the CPU
-	if (numVertices < 31000)
-	{
-		h_shortestDistancesCPU = (unsigned int *)malloc(numVertices * sizeof(unsigned int));
 		clock_t cpu_startTime, cpu_endTime;
 
 		double cpu_ElapseTime = 0;
 		cpu_startTime = clock();
-		//dijkstraCPU(weightMatrix, h_shortestDistancesCPU, sourceVertex, numVertices);
+		dijkstraCPU(weightMatrix, h_shortestDistancesCPU, sourceVertex, numVertices);
 
 		cpu_endTime = clock();
 
