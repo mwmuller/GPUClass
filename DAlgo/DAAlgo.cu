@@ -172,13 +172,36 @@ __global__ void initializeArrays(bool * __restrict__ d_finalizedVertices, unsign
 
 
 // This function shall pull the values from 
-__global__ void performRelaxation(unsigned int * shortestDistances,
-	unsigned int * updatingShortestDistances, const unsigned int * weightArray, const int * edgeArray,
+__global__ void performRelaxation(const int * vertexArray, unsigned int * shortestDistances,
+	unsigned int * updatingShortestDistances, bool * finalizedVertices, const unsigned int * weightArray, const int * edgeArray,
 	const int edgeStart, const int edgeEnd, const int numVertices)
 {
-	int tx = threadIdx.x;
-	int tid = blockIdx.x * blockDim.x + tx; // Equal to the edgevalue + tx
+	int tx = threadIdx.x; 
+	int tid = blockIdx.x * blockDim.x + tx; // We have a total thread count of numVertices * neighbors.
 	int neighbors = edgeEnd - edgeStart; // neighbors per vertex
+
+	__shared__ unsigned int s_shortest[CHILD_BLOCK_SIZE];
+	extern __shared__ unsigned int s_wieghtedEdgeArray[]; // Weight Array 0...numVertices/2-1 | edge Array numVertices/2...numVertices-1
+
+	// Creating temps to copy into shared memory.
+
+	if (tid < numVertices) {
+		s_shortest[tx] = shortestDistances[tid];
+		__syncthreads();
+
+		if (finalizedVertices[tid] == true) {
+
+			finalizedVertices[tid] = false;
+
+			int edgeStart = vertexArray[tid], edgeEnd; // get the edge index that we start at
+
+			// Check if we are beyond the number of verticies that we can check
+			if (tid + 1 < (numVertices)) edgeEnd = vertexArray[tid + 1]; // Check if we are in bounds. 
+			else                         edgeEnd = numEdges; // We are at the max.
+
+
+
+
 	if (tid < edgeEnd)
 	{
 		int edge = edgeStart + tid; // edgeStart = numNeighbors * vertex 
@@ -195,34 +218,15 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 	unsigned int * updatingShortestDistances, const int numVertices, const int numEdges) {
 	int tx = threadIdx.x;
 	int tid = blockIdx.x*blockDim.x + tx;
-	int neighbors = numEdges / numVertices; 
-	__shared__ unsigned int s_shortest[BLOCK_SIZE];
-
 	// Creating temps to copy into shared memory.
 
 	if (tid < numVertices) {
-		s_shortest[tx] = shortestDistances[tid];
-		__syncthreads();
-
-		if (finalizedVertices[tid] == true) {
-		
-			finalizedVertices[tid] = false;
-
-			int edgeStart = vertexArray[tid], edgeEnd; // get the edge index that we start at
-
-			// Check if we are beyond the number of verticies that we can check
-			if (tid + 1 < (numVertices)) edgeEnd = vertexArray[tid + 1]; // Check if we are in bounds. 
-			else                         edgeEnd = numEdges; // We are at the max.
 
 			__syncthreads();
-			performRelaxation << <ceil((float)((edgeEnd - edgeStart) * blockDim.x) / CHILD_BLOCK_SIZE), CHILD_BLOCK_SIZE >> > (updatingShortestDistances, shortestDistances, weightArray, edgeArray, edgeStart, edgeEnd, numVertices);
+			performRelaxation << <ceil((float)((edgeEnd - edgeStart)*numVertices) / CHILD_BLOCK_SIZE), CHILD_BLOCK_SIZE>> > (vertexArray, updatingShortestDistances, shortestDistances, finalizedVertices,
+																															   weightArray, edgeArray, edgeStart, edgeEnd, numVertices);
 			cudaDeviceSynchronize();
 			__syncthreads();
-
-			//for (int edge = edgeStart; edge < edgeEnd; edge++) {
-				//int nid = edgeArray[edge]; // get the ID which will be associated with a vertex
-				//atomicMin(&updatingShortestDistances[nid], s_shortest[tx] + weightArray[edge]); // assigns minimum value to uSD pointer
-			//}
 		}
 	}
 }
@@ -293,7 +297,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 		//     stalling of the GPU waiting for results.
 		for (int asyncIter = 0; asyncIter < NUM_ASYNCHRONOUS_ITERATIONS; asyncIter++) {
 
-			Kernel1 << <(ceil((float)(graph->numVertices)/BLOCK_SIZE)), BLOCK_SIZE>> > (d_vertexArray, d_edgeArray, d_weightArray, d_finalizedVertices, d_shortestDistances,
+			Kernel1 << <1, 1>> > (d_vertexArray, d_edgeArray, d_weightArray, d_finalizedVertices, d_shortestDistances,
 				d_updatingShortestDistances, graph->numVertices, graph->numEdges);
 
 			cudaDeviceSynchronize();
