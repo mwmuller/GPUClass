@@ -12,7 +12,7 @@
 #define NUM_ASYNCHRONOUS_ITERATIONS 30 // Number of async loop iterations before attempting to read results back
 
 #define BLOCK_SIZE 32
-#define CHILD_BLOCK_SIZE 16
+#define CHILD_BLOCK_SIZE 32
 
 // --- The graph data structure is an adjacency list.
 typedef struct {
@@ -136,7 +136,6 @@ bool allFinalizedVertices(bool *finalizedVertices, int numVertices) {
 	{
 		if (finalizedVertices[i] == true)
 		{
-			//printf("Index that is false: %d", i);
 			return false;
 		}
 	}
@@ -181,13 +180,18 @@ __global__ void performRelaxation(const int * vertexArray, unsigned int * shorte
 	int neighbors = edgeEnd - edgeStart; // neighbors per vertex
 
 	__shared__ unsigned int s_shortest[CHILD_BLOCK_SIZE];
-	extern __shared__ unsigned int s_wieghtedEdgeArray[]; // Weight Array 0...numVertices/2-1 | edge Array numVertices/2...numVertices-1
-
+	__shared__ unsigned int s_updating[CHILD_BLOCK_SIZE];
+	extern __shared__ unsigned int s_weightedEdgeArray[]; // Weight Array 0...numVertices/2-1 | edge Array numVertices/2...numVertices-1
 	// Creating temps to copy into shared memory.
-
+	if (tx < neighbors * numVertices)
+	{
+		s_weightedEdgeArray[tx] = weightArray[tid];
+		s_weightedEdgeArray[tx * ] = 
+	}
 	if (tid < numVertices) {
 		s_shortest[tx] = shortestDistances[tid];
-		__syncthreads();
+		s_updating[tx] = updatingShortestDistances[tid];
+ 		__syncthreads();
 
 		if (finalizedVertices[tid] == true) {
 
@@ -201,12 +205,11 @@ __global__ void performRelaxation(const int * vertexArray, unsigned int * shorte
 
 
 
-
 	if (tid < edgeEnd)
 	{
 		int edge = edgeStart + tid; // edgeStart = numNeighbors * vertex 
-		int nid = edgeArray[edge]; // get the ID which will be associated with a vertex
-		atomicMin(&updatingShortestDistances[nid], shortestDistances[(edgeEnd*blockIdx.x) / neighbors] + weightArray[edge]); // assigns minimum value to uSD pointer
+		int nid = s_weightedEdgeArray[edge]; // get the ID which will be associated with a vertex
+		atomicMin(&updatingShortestDistances[nid], s_shortest[tx] + s_weightedEdgeArray[edge]); // assigns minimum value to uSD pointer
 	}
 }
 
@@ -218,13 +221,15 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 	unsigned int * updatingShortestDistances, const int numVertices, const int numEdges) {
 	int tx = threadIdx.x;
 	int tid = blockIdx.x*blockDim.x + tx;
+	int neighbors = numEdges / numVertices;
 	// Creating temps to copy into shared memory.
 
 	if (tid < numVertices) {
 
 			__syncthreads();
-			performRelaxation << <ceil((float)((edgeEnd - edgeStart)*numVertices) / CHILD_BLOCK_SIZE), CHILD_BLOCK_SIZE>> > (vertexArray, updatingShortestDistances, shortestDistances, finalizedVertices,
-																															   weightArray, edgeArray, edgeStart, edgeEnd, numVertices);
+			performRelaxation << <ceil((float)((edgeEnd - edgeStart)*numVertices) / CHILD_BLOCK_SIZE), CHILD_BLOCK_SIZE * neighbors, CHILD_BLOCK_SIZE*neighbors*sizeof(unsigned int)>> > 
+			(vertexArray, updatingShortestDistances, shortestDistances, finalizedVertices, weightArray, edgeArray, edgeStart, edgeEnd, numVertices);
+
 			cudaDeviceSynchronize();
 			__syncthreads();
 		}
