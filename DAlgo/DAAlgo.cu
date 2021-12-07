@@ -1,4 +1,10 @@
-﻿#include <sstream>
+﻿// The base code was taken from the following post in StackOverflow by the user Vitality:
+// https://stackoverflow.com/questions/12763991/dijkstras-algorithm-in-cuda
+// Additional or refactored code that is unique will be explicitly commented with Michael Muller's name
+
+
+// Michael Muller
+#include <sstream>
 #include <vector>
 #include <iostream>
 #include <time.h>
@@ -9,13 +15,16 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-#define NUM_ASYNCHRONOUS_ITERATIONS 3  // Number of async loop iterations before attempting to read results back
+#define NUM_ASYNCHRONOUS_ITERATIONS 5  // Number of async loop iterations before attempting to read results back
 #define ASYNC_THRESHOLD 2000 // Used to determine if more iterations are required. (Max of 25)
-#define ASYNC_THRESHOLD_NEIGHBORS 25 // For each 10 neighbors add another iteration
+#define ASYNC_THRESHOLD_NEIGHBORS 10 // For each 10 neighbors add another iteration
 #define BLOCK_SIZE 32
 
 
 // --- The graph data structure is an adjacency list.
+
+// Michael Muller
+// Floats were changed to unsigned int, as 'AtomicMin' function doesn't work with float values.
 typedef struct {
 
 	// --- Contains the integer offset to point to the edge list for each vertex
@@ -63,7 +72,7 @@ void generateRandomGraph(GraphData *graph, int numVertices, int neighborsPerVert
 				if (goOn == true) tempArray[l] = temp;
 			}
 			graph->edgeArray[k * neighborsPerVertex + l] = temp;
-			graph->weightArray[k * neighborsPerVertex + l] = (rand() % 1000 + 1);
+			graph->weightArray[k * neighborsPerVertex + l] = (rand() % 1000 + 1); // Michael Muller - changed to int between 1 and 1000
 		}
 	}
 }
@@ -169,7 +178,7 @@ __global__ void initializeArrays(bool * __restrict__ d_finalizedVertices, unsign
 }
 
 /**************************/
-/* DIJKSTRA GPU KERNEL #1 */
+/* DIJKSTRA GPU KERNEL #1 */ // Michael Muller, restructured to include some shared memory
 /**************************/
 __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __restrict__ edgeArray,
 	const unsigned int * __restrict__ weightArray, bool * __restrict__ finalizedVertices, unsigned int * __restrict__ shortestDistances,
@@ -195,7 +204,8 @@ __global__  void Kernel1(const int * __restrict__ vertexArray, const int* __rest
 
 			for (int edge = edgeStart; edge < edgeEnd; edge++) {
 				int nid = edgeArray[edge]; // get the ID which will be associated with a vertex
-				atomicMin(&updatingShortestDistances[nid], s_shortest[tx] + weightArray[edge]); // assigns minimum value to uSD pointer
+				atomicMin(&updatingShortestDistances[nid], s_shortest[tx] + weightArray[edge]); // assigns minimum value to uSD pointer, Michael Muller - All arrays changed to unsigned ints/ int
+				// As AtomicMin doesn't work with float values.
 			}
 		}
 	}
@@ -217,7 +227,6 @@ __global__  void Kernel2(const int * __restrict__ vertexArray, const int * __res
 			finalizedVertices[tid] = true;
 		}
 
-		//__syncthreads();
 		updatingShortestDistances[tid] = shortestDistances[tid];
 	}
 }
@@ -230,7 +239,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 	//Init of GPU timing 
 	float elapsed = 0, elapsedComp = 0;
 	cudaEvent_t start1, stop1, start0, stop0;
-
+	// Michael Muller - added timings to code. 
 	cudaEventCreate(&start1);
 	cudaEventCreate(&stop1);
 
@@ -293,6 +302,7 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 
 
 	// Results timing section
+	// Michael Muller - timings added
 	cudaEventRecord(stop1, 0);
 	cudaEventRecord(stop0, 0);
 	cudaEventSynchronize(stop1);
@@ -324,9 +334,9 @@ void dijkstraGPU(GraphData *graph, const int sourceVertex, unsigned int * __rest
 int main() {
 
 	// --- Number of graph vertices
-	int numVertices = 45000;
+	int numVertices = 20000;
 	// --- Number of edges per graph vertex
-	int neighborsPerVertex = 50;
+	int neighborsPerVertex = 1000;
 
 	// --- Source vertex
 	int sourceVertex = 0;
@@ -339,6 +349,8 @@ int main() {
 	unsigned int *h_shortestDistancesCPU = (unsigned int *)malloc(numVertices * sizeof(unsigned int));
 	// --- From adjacency list to adjacency matrix.
 	//     Initializing the adjacency matrix
+	// Michael Muller - Added constraints on when to run certain CPU code
+	// Added timings for CPU code
 	if (numVertices < 45001) // Prevent overflow for cpu graph
 	{
 		weightMatrix = (unsigned int *)malloc(numVertices * numVertices * sizeof(unsigned int));
@@ -410,14 +422,14 @@ int main() {
 		}
 	}
 
-	// Mismatch checking
+	// Mismatch checking - Michael Muller
 	bool matching = true;
 	unsigned int wrong = 0;
 	for (int k = 0; k < numVertices; k++)
 	{
 		if (h_shortestDistancesGPU[k] != h_shortestDistancesCPU[k])
 		{
-			//printf("vertex mismatch = %d| CPU val = %d | GPU val = %d | Difference = %d\n", k, h_shortestDistancesCPU[k], h_shortestDistancesGPU[k], h_shortestDistancesCPU[k] - h_shortestDistancesGPU[k]);
+			printf("vertex mismatch = %d| CPU val = %d | GPU val = %d | Difference = %d\n", k, h_shortestDistancesCPU[k], h_shortestDistancesGPU[k], h_shortestDistancesCPU[k] - h_shortestDistancesGPU[k]);
 			wrong++;
 			matching = false;
 		}
