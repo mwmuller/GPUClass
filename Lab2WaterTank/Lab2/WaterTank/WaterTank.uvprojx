@@ -384,9 +384,9 @@
           <GroupName>Source Group 1</GroupName>
           <Files>
             <File>
-              <FileName>WaterTank.c</FileName>
+              <FileName>WaterTankPart2.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\WaterTank.c</FilePath>
+              <FilePath>.\WaterTankPart2.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -776,9 +776,9 @@
           <GroupName>Source Group 1</GroupName>
           <Files>
             <File>
-              <FileName>WaterTank.c</FileName>
+              <FileName>WaterTankPart2.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\WaterTank.c</FilePath>
+              <FilePath>.\WaterTankPart2.c</FilePath>
             </File>
           </Files>
         </Group>

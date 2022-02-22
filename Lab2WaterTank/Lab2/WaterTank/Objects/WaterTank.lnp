@@ -1,5 +1,5 @@
 --cpu Cortex-M0+
-".\objects\watertank.o"
+".\objects\watertankpart2.o"
 ".\objects\startup_mkl25z4.o"
 ".\objects\system_mkl25z4.o"
 --ro-base 0x00000000 --entry 0x00000000 --rw-base 0x1FFFF000 --entry Reset_Handler --first __Vectors --strict --summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
