@@ -3,7 +3,7 @@
 <title>Static Call Graph - [.\Objects\WaterTank.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image .\Objects\WaterTank.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6160001: Last Updated: Mon Feb 14 11:59:45 2022
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6160001: Last Updated: Mon Feb 21 19:23:09 2022
 <BR><P>
 <H3>Maximum Stack Usage =         24 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -390,7 +390,7 @@ Global Symbols
 <P><STRONG><a name="[26]"></a>SystemInit</STRONG> (Thumb, 8 bytes, Stack size 0 bytes, system_mkl25z4.o(.text.SystemInit))
 <BR>[Address Reference Count : 1]<UL><LI> startup_mkl25z4.o(.text)
 </UL>
-<P><STRONG><a name="[3b]"></a>determineLED</STRONG> (Thumb, 28 bytes, Stack size 8 bytes, watertank.o(.text.determineLED))
+<P><STRONG><a name="[3b]"></a>determineLED</STRONG> (Thumb, 68 bytes, Stack size 8 bytes, watertankpart2.o(.text.determineLED))
 <BR><BR>[Stack]<UL><LI>Max Depth = 24<LI>Call Chain = determineLED &rArr; setLEDState
 </UL>
 <BR>[Calls]<UL><LI><a href="#[3c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;setLEDState
@@ -398,7 +398,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[32]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 </UL>
 
-<P><STRONG><a name="[32]"></a>main</STRONG> (Thumb, 104 bytes, Stack size 0 bytes, watertank.o(.text.main))
+<P><STRONG><a name="[32]"></a>main</STRONG> (Thumb, 104 bytes, Stack size 0 bytes, watertankpart2.o(.text.main))
 <BR><BR>[Stack]<UL><LI>Max Depth = 24<LI>Call Chain = main &rArr; determineLED &rArr; setLEDState
 </UL>
 <BR>[Calls]<UL><LI><a href="#[3e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;setSensorTrigger
@@ -409,20 +409,20 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[31]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__rt_entry_main
 </UL>
 
-<P><STRONG><a name="[3d]"></a>o_portInit</STRONG> (Thumb, 124 bytes, Stack size 20 bytes, watertank.o(.text.o_portInit))
+<P><STRONG><a name="[3d]"></a>o_portInit</STRONG> (Thumb, 120 bytes, Stack size 20 bytes, watertankpart2.o(.text.o_portInit))
 <BR><BR>[Stack]<UL><LI>Max Depth = 20<LI>Call Chain = o_portInit
 </UL>
 <BR>[Called By]<UL><LI><a href="#[32]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 </UL>
 
-<P><STRONG><a name="[3c]"></a>setLEDState</STRONG> (Thumb, 28 bytes, Stack size 16 bytes, watertank.o(.text.setLEDState))
+<P><STRONG><a name="[3c]"></a>setLEDState</STRONG> (Thumb, 28 bytes, Stack size 16 bytes, watertankpart2.o(.text.setLEDState))
 <BR><BR>[Stack]<UL><LI>Max Depth = 16<LI>Call Chain = setLEDState
 </UL>
 <BR>[Called By]<UL><LI><a href="#[32]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 <LI><a href="#[3b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;determineLED
 </UL>
 
-<P><STRONG><a name="[3e]"></a>setSensorTrigger</STRONG> (Thumb, 80 bytes, Stack size 0 bytes, watertank.o(.text.setSensorTrigger))
+<P><STRONG><a name="[3e]"></a>setSensorTrigger</STRONG> (Thumb, 60 bytes, Stack size 0 bytes, watertankpart2.o(.text.setSensorTrigger))
 <BR><BR>[Called By]<UL><LI><a href="#[32]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;main
 </UL>
 <P>

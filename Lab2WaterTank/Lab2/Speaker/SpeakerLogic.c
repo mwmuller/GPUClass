@@ -1,10 +1,10 @@
 #include "MKL25Z4.h"                    // Device header
 #include "RTE_Components.h"             // Component selection
 
-#define SPKR_SHIFT (0)
+#define SPKR_SHIFT (0) // connected to PTC0
 #define HZDELAY (20000) // alternate frequency
 #define MASK(x) (1ul << x)
-#define SW_SWITCH (4)
+#define SW_SWITCH (4) // connected to PTD4
 
 void initSpeaker(void);
 void delay(volatile unsigned int);
