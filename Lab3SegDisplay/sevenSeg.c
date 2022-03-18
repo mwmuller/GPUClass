@@ -43,7 +43,13 @@ enum segState
 	six,			// 1011111 -- 0110
 	seven,		// 1110000 -- 0111
 	eight,		// 1111111 -- 1000
-	nine			// 1111011 -- 1001
+	nine,			// 1111011 -- 1001
+	ten,			// 1110111 -- 1010 (a)
+	eleven,   // 0011111 -- 1011 (b)
+	twelve,		// 1001111 -- 1100 (c)
+	thirteen,	// 0111101 -- 1101 (d)
+	fourteen,	// 1001111 -- 1110 (e)
+	fifteen   // 1000111 -- 1111 (f)
 };
 
 static const short Segments[7] = {SEG_A, SEG_B, SEG_C, SEG_D, SEG_E, SEG_F, SEG_G};
@@ -147,6 +153,24 @@ void handleSw()
 				break;
 			case nine:
 				setLedMask(0x7B); // 0111-1011 -- 1001
+				break;
+		  case ten:
+				setLedMask(0x77); // 0111-0111 -- 1010 (a)
+				break;
+			case eleven:
+				setLedMask(0x1F); // 0001-1111 -- 1011 (b)
+				break;
+			case twelve:
+				setLedMask(0x4E); // 0100-1110 -- 1100 (c)
+				break;
+			case thirteen:
+				setLedMask(0x3D); // 0011-1101 -- 1101 (d)
+				break;
+			case fourteen:
+				setLedMask(0x4F); // 0100-1111 -- 1110 (e)
+				break;
+			case fifteen:
+				setLedMask(0x47); // 0100-0111 -- 1111 (f)
 				break;
 			default:
 				setLedMask(0x7E); // 0111-1110 -- 0000
