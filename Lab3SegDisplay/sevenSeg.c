@@ -33,23 +33,23 @@ void setLedMask(uint8_t);
 
 // display bits to be used in or'ing
 enum segState
-{						// output bits -- Input Switches
-	dash = 0, // 1111110 -- 0000
+{				// output bits -- Input Switches
+	dash = 0, 		// 1111110 -- 0000
 	one,			// 0110000 -- 0001
 	two, 			// 1101101 -- 0010
-	three,		// 1111001 -- 0011
+	three,			// 1111001 -- 0011
 	four,			// 0110011 -- 0100
 	five,			// 1011011 -- 0101
 	six,			// 1011111 -- 0110
-	seven,		// 1110000 -- 0111
-	eight,		// 1111111 -- 1000
+	seven,			// 1110000 -- 0111
+	eight,			// 1111111 -- 1000
 	nine,			// 1111011 -- 1001
 	ten,			// 1110111 -- 1010 (a)
-	eleven,   // 0011111 -- 1011 (b)
-	twelve,		// 1001111 -- 1100 (c)
-	thirteen,	// 0111101 -- 1101 (d)
-	fourteen,	// 1001111 -- 1110 (e)
-	fifteen   // 1000111 -- 1111 (f)
+	eleven,   		// 0011111 -- 1011 (b)
+	twelve,			// 1001111 -- 1100 (c)
+	thirteen,		// 0111101 -- 1101 (d)
+	fourteen,		// 1001111 -- 1110 (e)
+	fifteen   		// 1000111 -- 1111 (f)
 };
 
 static const short Segments[7] = {SEG_A, SEG_B, SEG_C, SEG_D, SEG_E, SEG_F, SEG_G};
@@ -102,16 +102,16 @@ void handleSw()
 	short switchesPressed = 0;
 	uint8_t i; // iterator
 	/*
-	dash = 0, // 0111-1110 -- 0000
-	one,			// 0011-0000 -- 0001
-	two, 			// 0110-1101 -- 0010
+	dash = 0, 	// 0111-1110 -- 0000
+	one,		// 0011-0000 -- 0001
+	two, 		// 0110-1101 -- 0010
 	three,		// 0111-1001 -- 0011
-	four,			// 0011-0011 -- 0100
-	five,			// 0101-1011 -- 0101
-	six,			// 0101-1111 -- 0110
+	four,		// 0011-0011 -- 0100
+	five,		// 0101-1011 -- 0101
+	six,		// 0101-1111 -- 0110
 	seven,		// 0111-0000 -- 0111
 	eight,		// 0111-1111 -- 1000
-	nine			// 0111-1011 -- 1001
+	nine		// 0111-1011 -- 1001
 	*/
 	for(i = 0; i < SW_NUM; i++)
 	{
