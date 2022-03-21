@@ -34,7 +34,7 @@ void setLedMask(uint8_t);
 // display bits to be used in or'ing
 enum segState
 {				// output bits -- Input Switches
-	dash = 0, 		// 1111110 -- 0000
+	zero = 0, 		// 1111110 -- 0000
 	one,			// 0110000 -- 0001
 	two, 			// 1101101 -- 0010
 	three,			// 1111001 -- 0011
@@ -102,7 +102,7 @@ void handleSw()
 	short switchesPressed = 0;
 	uint8_t i; // iterator
 	/*
-	dash = 0, 	// 0111-1110 -- 0000
+	zero = 0, 	// 0111-1110 -- 0000
 	one,		// 0011-0000 -- 0001
 	two, 		// 0110-1101 -- 0010
 	three,		// 0111-1001 -- 0011
@@ -124,7 +124,7 @@ void handleSw()
 	{
 		switch(switchesPressed)
 		{
-			case dash:
+			case zero:
 				setLedMask(0x7E); // 0111-1110 -- 0000
 				break;
 			case one:
@@ -154,7 +154,7 @@ void handleSw()
 			case nine:
 				setLedMask(0x7B); // 0111-1011 -- 1001
 				break;
-		  case ten:
+		  	case ten:
 				setLedMask(0x77); // 0111-0111 -- 1010 (a)
 				break;
 			case eleven:
@@ -174,7 +174,7 @@ void handleSw()
 				break;
 			default:
 				setLedMask(0x7E); // 0111-1110 -- 0000
-			break;
+				break;
 		}
 	// If the state of the display has changed, update the disply
 	}
